@@ -103,12 +103,35 @@ class ODMeterTester:
         return timestamps
 
     def _free_channel(self):
-        """Return (device_label, channel_int) for the first unoccupied channel, or (None, None)."""
-        body, _, _, _ = self._req("get", "/device/")
-        for dev in (body or []):
+        """
+        Return (device_label, channel_int) for the first unoccupied channel on a
+        device that has NO channels currently in a running experiment.
+
+        Safety: Device.ReadSampleOD() reads all non-nil samples on the device and
+        returns them to whichever experiment calls it. Adding a test sample to a
+        device that is mid-experiment would inject an unexpected channel into that
+        experiment's AddReadings call, causing a nil-pointer panic in the server.
+        We therefore exclude entire devices that are touched by any running experiment.
+        """
+        devices_body, _, _, _ = self._req("get", "/device/")
+        exps_body,    _, _, _ = self._req("get", "/acqusition/")
+
+        # Build the set of device labels used by any running experiment
+        busy_devices: set[str] = set()
+        for exp in (exps_body or []):
+            if exp.get("is_running"):
+                for s in exp.get("samples", []):
+                    dev = s.get("device")
+                    if dev:
+                        busy_devices.add(dev)
+
+        for dev in (devices_body or []):
+            if dev["label"] in busy_devices:
+                continue  # whole device is off-limits while experiment runs
             for ch in dev.get("channels", []):
                 if not ch.get("enabled"):
                     return dev["label"], ch["channel"]
+
         return None, None
 
     def _config_defaults(self):

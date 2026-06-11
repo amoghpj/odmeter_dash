@@ -117,8 +117,10 @@ class ODMeterTester:
         exps_body,    _, _, _ = self._req("get", "/acqusition/")
 
         # Build the set of device labels used by any running experiment
+        # Go encodes a nil slice as JSON null, so normalise to []
+        exps_list = exps_body if isinstance(exps_body, list) else []
         busy_devices: set[str] = set()
-        for exp in (exps_body or []):
+        for exp in exps_list:
             if exp.get("is_running"):
                 for s in exp.get("samples", []):
                     dev = s.get("device")
@@ -184,13 +186,14 @@ class ODMeterTester:
         body, ms, code, err = self._req("get", "/acqusition/")
         if err:
             return TestResult("experiments", "/api/acqusition/", "GET", False, detail=err, elapsed_ms=ms)
-        ok = code == 200 and isinstance(body, list)
+        exps = body if isinstance(body, list) else []  # Go encodes empty slice as null
+        ok = code == 200
         if ok:
-            n_run  = sum(1 for e in body if e.get("is_running"))
-            detail = f"{len(body)} experiment(s), {n_run} running"
+            n_run  = sum(1 for e in exps if e.get("is_running"))
+            detail = f"{len(exps)} experiment(s), {n_run} running"
         else:
             detail = f"HTTP {code}"
-        return TestResult("experiments", "/api/acqusition/", "GET", ok, code, ms, detail, body)
+        return TestResult("experiments", "/api/acqusition/", "GET", ok, code, ms, detail, exps)
 
     def test_websocket(self, timeout: int = 30) -> TestResult:
         """Connect and wait for a NewReadings message; measures time-to-first-message."""
@@ -376,8 +379,9 @@ class ODMeterTester:
 
         # Guard: server reachable + no running experiments
         exps, _, _, err = self._req("get", "/acqusition/")
-        if exps is None:
+        if err:
             return [IntervalResult(0, error=f"Server unreachable: {err}")]
+        exps = exps if isinstance(exps, list) else []  # Go encodes empty slice as null
         if any(e.get("is_running") for e in exps):
             return [IntervalResult(0, error="An experiment is already running — stop it first")]
 

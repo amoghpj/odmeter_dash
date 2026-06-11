@@ -15,6 +15,7 @@ import requests
 import pandas as pd
 
 import growth_rates
+import api_tests
 
 SERVER_ADDR = "127.0.0.1:8080"
 POLL_INTERVAL_MS = 10_000
@@ -34,6 +35,17 @@ _ws_counter = 0          # incremented whenever new rows land in the buffer
 _ws_last_seen: dict = {} # (device, channel) -> last t_str, for deduplication
 _ws_active_filepath: str | None = None
 _ws_meta: dict = {}      # filepath -> {time_started, sample_map, valid_pairs}
+
+# Per-device inter-message timing (for Diagnostics tab)
+_ws_cycle_timings: collections.deque = collections.deque(maxlen=100)  # (device, interval_s)
+_ws_last_t_by_device: dict = {}  # device_label -> last monotonic timestamp
+
+# Diagnostics background-thread state
+_diag: dict = {
+    "read":     {"thread": None, "results": None, "running": False},
+    "write":    {"thread": None, "results": None, "running": False},
+    "interval": {"thread": None, "results": None, "running": False},
+}
 
 
 # ── shared ────────────────────────────────────────────────────────────────────
@@ -542,6 +554,8 @@ app.layout = html.Div(
         dcc.Store(id="live-paused", data=False),
         dcc.Interval(id="poll-interval", interval=POLL_INTERVAL_MS, n_intervals=0),
         dcc.Interval(id="gr-poll", interval=5000, n_intervals=0, disabled=True),
+        dcc.Interval(id="diag-poll", interval=500, n_intervals=0, disabled=True),
+        dcc.Interval(id="diag-ws-poll", interval=5000, n_intervals=0),
         dcc.Download(id="download-csv"),
 
         # ── header ────────────────────────────────────────────────────────────
@@ -595,6 +609,7 @@ app.layout = html.Div(
                     [
                         html.Button("Live", id="nav-live", n_clicks=0, style=_NAV_ACTIVE),
                         html.Button("History", id="nav-browser", n_clicks=0, style=_NAV_BASE),
+                        html.Button("Diagnostics", id="nav-diag", n_clicks=0, style=_NAV_BASE),
                     ],
                     id="sidebar",
                     style=_SIDEBAR_OPEN,
@@ -618,6 +633,70 @@ app.layout = html.Div(
                                 html.Div(id="plots-container"),
                             ],
                             id="content-live",
+                        ),
+
+                        # Diagnostics content
+                        html.Div(
+                            html.Div(
+                                [
+                                    html.H3("API Diagnostics",
+                                            style={"marginTop": "0", "marginBottom": "20px"}),
+
+                                    # ── Health checks ──────────────────────
+                                    html.Div([
+                                        html.H4("Health Checks", style={"marginBottom": "8px"}),
+                                        html.Button("Run", id="diag-run-read", n_clicks=0,
+                                                    style={"fontSize": "13px", "cursor": "pointer",
+                                                           "padding": "4px 16px", "marginBottom": "12px"}),
+                                        html.Div(id="diag-read-output"),
+                                    ], style={"marginBottom": "28px"}),
+
+                                    # ── Write tests ────────────────────────
+                                    html.Div([
+                                        html.H4("Write Tests", style={"marginBottom": "4px"}),
+                                        html.P("Creates and deletes a sample + experiment using sentinel names. "
+                                               "Requires a free channel and no name collision on disk.",
+                                               style={"fontSize": "12px", "color": "#b26a00",
+                                                      "marginTop": "0", "marginBottom": "8px"}),
+                                        html.Button("Run Write Tests", id="diag-run-write", n_clicks=0,
+                                                    style={"fontSize": "13px", "cursor": "pointer",
+                                                           "padding": "4px 16px", "marginBottom": "12px"}),
+                                        html.Div(id="diag-write-output"),
+                                    ], style={"marginBottom": "28px"}),
+
+                                    # ── Interval accuracy ──────────────────
+                                    html.Div([
+                                        html.H4("Interval Accuracy Test", style={"marginBottom": "4px"}),
+                                        html.P(
+                                            f"Cycles through {api_tests.INTERVAL_TARGETS} s intervals, "
+                                            f"{api_tests.N_PER_INTERVAL} readings each. "
+                                            f"Estimated time: ~{sum(api_tests.INTERVAL_TARGETS) * api_tests.N_PER_INTERVAL + 30}s. "
+                                            "Requires no running experiments and a free channel.",
+                                            style={"fontSize": "12px", "color": "#555",
+                                                   "marginTop": "0", "marginBottom": "8px"},
+                                        ),
+                                        html.Button("Run Interval Test", id="diag-run-interval", n_clicks=0,
+                                                    style={"fontSize": "13px", "cursor": "pointer",
+                                                           "padding": "4px 16px", "marginBottom": "12px"}),
+                                        html.Div(id="diag-interval-output"),
+                                    ], style={"marginBottom": "28px"}),
+
+                                    # ── Live WS timing ─────────────────────
+                                    html.Div([
+                                        html.H4("Live WebSocket Timing",
+                                                style={"marginBottom": "4px"}),
+                                        html.P("Per-device inter-message intervals measured from the "
+                                               "live WebSocket stream (last 100 events).",
+                                               style={"fontSize": "12px", "color": "#555",
+                                                      "marginTop": "0", "marginBottom": "8px"}),
+                                        html.Div(id="diag-ws-timing"),
+                                    ]),
+                                ],
+                                style={"padding": "24px 28px", "maxWidth": "860px"},
+                            ),
+                            id="content-diag",
+                            style={"display": "none", "overflowY": "auto",
+                                   "height": "calc(100vh - 48px)"},
                         ),
 
                         # Browser content
@@ -670,10 +749,12 @@ app.layout = html.Div(
     Output("active-tab", "data"),
     Input("nav-live", "n_clicks"),
     Input("nav-browser", "n_clicks"),
+    Input("nav-diag", "n_clicks"),
     prevent_initial_call=True,
 )
-def set_active_tab(_, __):
-    return "tab-live" if ctx.triggered_id == "nav-live" else "tab-browser"
+def set_active_tab(_l, _b, _d):
+    mapping = {"nav-live": "tab-live", "nav-browser": "tab-browser", "nav-diag": "tab-diag"}
+    return mapping.get(ctx.triggered_id, "tab-live")
 
 
 @app.callback(
@@ -690,26 +771,35 @@ def toggle_sidebar(_, is_open):
     Output("sidebar", "style"),
     Output("nav-live", "style"),
     Output("nav-browser", "style"),
+    Output("nav-diag", "style"),
     Input("active-tab", "data"),
     Input("sidebar-open", "data"),
 )
 def update_sidebar(active_tab, is_open):
     sidebar_style = _SIDEBAR_OPEN if is_open else _SIDEBAR_CLOSED
-    live_style = _NAV_ACTIVE if active_tab == "tab-live" else _NAV_BASE
-    browser_style = _NAV_ACTIVE if active_tab == "tab-browser" else _NAV_BASE
-    return sidebar_style, live_style, browser_style
+    return (
+        sidebar_style,
+        _NAV_ACTIVE if active_tab == "tab-live"    else _NAV_BASE,
+        _NAV_ACTIVE if active_tab == "tab-browser" else _NAV_BASE,
+        _NAV_ACTIVE if active_tab == "tab-diag"    else _NAV_BASE,
+    )
 
 
 @app.callback(
     Output("content-live", "style"),
     Output("content-browser", "style"),
+    Output("content-diag", "style"),
     Input("active-tab", "data"),
 )
 def show_active_content(active_tab):
     show = {"display": "block"}
     hide = {"display": "none"}
-    return (show if active_tab == "tab-live" else hide,
-            show if active_tab == "tab-browser" else hide)
+    diag_show = {"display": "block", "overflowY": "auto", "height": "calc(100vh - 48px)"}
+    return (
+        show if active_tab == "tab-live"    else hide,
+        show if active_tab == "tab-browser" else hide,
+        diag_show if active_tab == "tab-diag" else hide,
+    )
 
 
 # ── live callbacks ────────────────────────────────────────────────────────────
@@ -725,7 +815,7 @@ def update_experiment_list(n, current_value):
     if not experiments:
         return [], current_value
     options = [{"label": e["name"], "value": e["name"]} for e in experiments]
-    running = next((e["name"] for e in experiments if e.get("status") == "running"), None)
+    running = next((e["name"] for e in experiments if e.get("is_running")), None)
     value = current_value or running or experiments[-1]["name"]
     return options, value
 
@@ -1036,6 +1126,212 @@ def poll_growth_rates(_, filepath):
     return dash.no_update, True  # idle — nothing to do
 
 
+# ── diagnostics callbacks ─────────────────────────────────────────────────────
+
+_BTN_STYLE = {"fontSize": "13px", "cursor": "pointer", "padding": "4px 16px", "marginBottom": "12px"}
+_TH_D = {"padding": "4px 8px", "fontSize": "11px", "textAlign": "left",
+          "color": "#888", "borderBottom": "1px solid #ddd"}
+_TD_D = {"padding": "3px 8px", "fontSize": "12px"}
+
+
+def _results_table(results: list) -> html.Div:
+    """Render a list of api_tests.TestResult as an HTML table."""
+    rows = []
+    for r in results:
+        color  = "#2a9d2a" if r.passed else "#c0392b"
+        tag    = "PASS" if r.passed else "FAIL"
+        ms_str = f"{r.elapsed_ms:.0f} ms" if r.elapsed_ms is not None else "—"
+        code   = str(r.status_code) if r.status_code else "—"
+        rows.append(html.Tr([
+            html.Td(r.name,   style={**_TD_D, "fontFamily": "monospace"}),
+            html.Td(r.method, style={**_TD_D, "color": "#666"}),
+            html.Td(code,     style=_TD_D),
+            html.Td(ms_str,   style={**_TD_D, "textAlign": "right"}),
+            html.Td(tag,      style={**_TD_D, "fontWeight": "bold", "color": color}),
+            html.Td(r.detail, style={**_TD_D, "color": "#555"}),
+        ]))
+    passed  = sum(1 for r in results if r.passed)
+    summary = html.P(
+        f"{passed}/{len(results)} passed",
+        style={"fontSize": "12px", "fontWeight": "bold", "margin": "6px 0 0",
+               "color": "#2a9d2a" if passed == len(results) else "#c0392b"},
+    )
+    return html.Div([
+        html.Table([
+            html.Thead(html.Tr([
+                html.Th(h, style=_TH_D) for h in
+                ["Test", "Method", "Status", "Time", "Result", "Detail"]
+            ])),
+            html.Tbody(rows),
+        ], style={"borderCollapse": "collapse", "width": "100%"}),
+        summary,
+    ])
+
+
+def _interval_table(results: list) -> html.Table:
+    """Render a list of api_tests.IntervalResult as an HTML table."""
+    rows = []
+    for r in results:
+        if r.error:
+            rows.append(html.Tr([
+                html.Td(f"{r.target_s}s" if r.target_s else "—", style=_TD_D),
+                html.Td(r.error, colSpan=6, style={**_TD_D, "color": "#c0392b"}),
+            ]))
+        else:
+            color = "#2a9d2a" if r.passed else "#e67e22"
+            rows.append(html.Tr([
+                html.Td(f"{r.target_s}s",           style={**_TD_D, "fontFamily": "monospace"}),
+                html.Td(str(r.n_received),           style={**_TD_D, "textAlign": "center"}),
+                html.Td(f"{r.mean_s:.3f}s",         style={**_TD_D, "textAlign": "right"}),
+                html.Td(f"{r.stdev_s:.3f}s",        style={**_TD_D, "textAlign": "right"}),
+                html.Td(f"{r.max_dev_s:.3f}s",      style={**_TD_D, "textAlign": "right"}),
+                html.Td("PASS" if r.passed else "WARN",
+                        style={**_TD_D, "fontWeight": "bold", "color": color}),
+                html.Td(str(r.raw_intervals),
+                        style={**_TD_D, "fontFamily": "monospace", "fontSize": "11px", "color": "#888"}),
+            ]))
+    return html.Table([
+        html.Thead(html.Tr([
+            html.Th(h, style=_TH_D)
+            for h in ["Target", "Received", "Mean", "StdDev", "Max Dev", "Result", "Raw (s)"]
+        ])),
+        html.Tbody(rows),
+    ], style={"borderCollapse": "collapse", "width": "100%"})
+
+
+def _ws_timing_display() -> html.Div:
+    """Format live WS inter-arrival stats grouped by device."""
+    with _ws_buffer_lock:
+        timings = list(_ws_cycle_timings)
+
+    if not timings:
+        return html.P("No timing data yet — an experiment must be running.",
+                      style={"color": "gray", "fontSize": "12px"})
+
+    by_device: dict = {}
+    for dev, iv in timings:
+        by_device.setdefault(dev, []).append(iv)
+
+    # Filter within-cycle gaps (< 5 s) — those are device2→device3 transitions,
+    # not full measurement cycles.
+    rows = []
+    for dev in sorted(by_device):
+        ivs = [iv for iv in by_device[dev] if iv >= 5.0]
+        if len(ivs) < 2:
+            continue
+        mean  = float(np.mean(ivs))
+        stdev = float(np.std(ivs))
+        rows.append(html.Tr([
+            html.Td(dev,                          style=_TD_D),
+            html.Td(str(len(ivs)),                style={**_TD_D, "textAlign": "center"}),
+            html.Td(f"{mean:.2f}s",               style={**_TD_D, "textAlign": "right"}),
+            html.Td(f"{stdev:.3f}s",              style={**_TD_D, "textAlign": "right"}),
+            html.Td(f"{min(ivs):.2f}–{max(ivs):.2f}s", style={**_TD_D, "textAlign": "right"}),
+        ]))
+
+    if not rows:
+        return html.P("Not enough cycle data yet (need ≥ 2 readings per device).",
+                      style={"color": "gray", "fontSize": "12px"})
+
+    return html.Table([
+        html.Thead(html.Tr([
+            html.Th(h, style=_TH_D)
+            for h in ["Device", "Cycles", "Mean interval", "StdDev", "Range"]
+        ])),
+        html.Tbody(rows),
+    ], style={"borderCollapse": "collapse"})
+
+
+def _run_diag_in_thread(key: str, fn):
+    """Start fn() in a daemon thread; track state in _diag[key]."""
+    def _worker():
+        try:
+            _diag[key]["results"] = fn()
+        except Exception as exc:
+            _diag[key]["results"] = [
+                api_tests.TestResult(key, "", "", False, detail=f"Unexpected error: {exc}")
+            ]
+        finally:
+            _diag[key]["running"] = False
+
+    _diag[key]["running"] = True
+    _diag[key]["results"] = None
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+@app.callback(
+    Output("diag-read-output", "children"),
+    Output("diag-poll", "disabled"),
+    Input("diag-run-read", "n_clicks"),
+    prevent_initial_call=True,
+)
+def start_read_tests(_):
+    _run_diag_in_thread("read", lambda: api_tests.ODMeterTester(SERVER_ADDR).run_read_tests())
+    return html.P("Running health checks…", style={"color": "gray", "fontSize": "12px"}), False
+
+
+@app.callback(
+    Output("diag-write-output", "children"),
+    Output("diag-poll", "disabled", allow_duplicate=True),
+    Input("diag-run-write", "n_clicks"),
+    prevent_initial_call=True,
+)
+def start_write_tests(_):
+    _run_diag_in_thread("write", lambda: api_tests.ODMeterTester(SERVER_ADDR).run_write_tests())
+    return html.P("Running write tests…", style={"color": "gray", "fontSize": "12px"}), False
+
+
+@app.callback(
+    Output("diag-interval-output", "children"),
+    Output("diag-poll", "disabled", allow_duplicate=True),
+    Input("diag-run-interval", "n_clicks"),
+    prevent_initial_call=True,
+)
+def start_interval_test(_):
+    _run_diag_in_thread(
+        "interval",
+        lambda: api_tests.ODMeterTester(SERVER_ADDR).measure_interval_accuracy(),
+    )
+    est = sum(api_tests.INTERVAL_TARGETS) * api_tests.N_PER_INTERVAL + 30
+    return (
+        html.P(f"Running interval test… (~{est}s)", style={"color": "gray", "fontSize": "12px"}),
+        False,
+    )
+
+
+@app.callback(
+    Output("diag-read-output",     "children", allow_duplicate=True),
+    Output("diag-write-output",    "children", allow_duplicate=True),
+    Output("diag-interval-output", "children", allow_duplicate=True),
+    Output("diag-poll", "disabled", allow_duplicate=True),
+    Input("diag-poll", "n_intervals"),
+    prevent_initial_call=True,
+)
+def diag_poll_tick(_):
+    def _out(key, fmt_fn):
+        state = _diag[key]
+        if state["running"]:
+            return dash.no_update
+        if state["results"] is not None:
+            return fmt_fn(state["results"])
+        return dash.no_update
+
+    read_out     = _out("read",     _results_table)
+    write_out    = _out("write",    _results_table)
+    interval_out = _out("interval", _interval_table)
+
+    any_running = any(d["running"] for d in _diag.values())
+    return read_out, write_out, interval_out, not any_running
+
+
+@app.callback(
+    Output("diag-ws-timing", "children"),
+    Input("diag-ws-poll", "n_intervals"),
+)
+def update_ws_timing(_):
+    return _ws_timing_display()
+
+
 # ── WebSocket live consumer ───────────────────────────────────────────────────
 
 import websocket as _websocket
@@ -1082,6 +1378,14 @@ def _ws_consumer():
                     _ws_buffer.extend(new_rows)
                     _ws_counter += 1
                     print(f"[WS {_ts()}] +{len(new_rows)} rows (buffer={len(_ws_buffer)})", flush=True)
+
+                # Track per-device inter-arrival timing for the Diagnostics tab
+                now = _time.monotonic()
+                devices_seen = {r["device"] for r in msg.get("readings", [])}
+                for dev in devices_seen:
+                    if dev in _ws_last_t_by_device:
+                        _ws_cycle_timings.append((dev, round(now - _ws_last_t_by_device[dev], 3)))
+                    _ws_last_t_by_device[dev] = now
         except Exception as e:
             print(f"[WS {_ts()}] parse error: {e}", flush=True)
 

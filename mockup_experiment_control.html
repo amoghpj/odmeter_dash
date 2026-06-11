@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ODMeter — Experiment Control Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #111; color: #ddd; display: flex; height: 100vh; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 160px; background: #1a1a1a; border-right: 1px solid #2a2a2a;
+    display: flex; flex-direction: column; padding: 12px 8px; gap: 6px; flex-shrink: 0;
+  }
+  .nav-logo { color: #aaa; font-size: 11px; padding: 4px 8px 12px; letter-spacing: 1px; text-transform: uppercase; }
+  .nav-btn {
+    background: none; border: none; color: #aaa; text-align: left;
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  .nav-btn.active { background: #2a2a2a; color: #fff; }
+  .nav-btn:hover { background: #222; color: #ddd; }
+
+  /* ── Main ── */
+  #main { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Buttons ── */
+  .btn {
+    border: none; border-radius: 6px; padding: 7px 16px;
+    font-size: 12px; cursor: pointer; font-weight: 500;
+  }
+  .btn-stop   { background: #7a2020; color: #fff; }
+  .btn-close  { background: #333; color: #bbb; }
+  .btn-create { background: #1a3a5c; color: #fff; }
+  .btn-add    { background: #1e1e1e; border: 1px dashed #333; color: #666;
+                font-size: 12px; padding: 5px 12px; width: 100%; margin-top: 2px;
+                cursor: pointer; text-align: left; border-radius: 0 0 6px 6px; }
+  .btn-add:hover { color: #aaa; border-color: #555; }
+  .btn-live   { background: #2a2a3a; color: #aab; border: 1px solid #334; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── Page header ── */
+  .back-btn {
+    background: #222; border: 1px solid #333; color: #888; border-radius: 6px;
+    padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  .back-btn:hover { color: #ccc; border-color: #555; }
+  .page-header { display: flex; align-items: center; gap: 12px; }
+  .page-title { font-size: 15px; font-weight: 600; color: #bbb; }
+
+  /* ── Section headers ── */
+  .section-header {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 8px;
+  }
+
+  /* ── Status banner ── */
+  #status-banner {
+    background: #1c2a1c; border: 1px solid #2d4a2d; border-radius: 10px;
+    padding: 16px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #3d3; flex-shrink: 0; }
+  .status-title { font-size: 15px; font-weight: 600; color: #eee; }
+  .status-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .banner-controls { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  /* ── Two-column layout ── */
+  .two-col { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 960px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── Define panel ── */
+  #define-panel { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 20px; }
+
+  .form-row { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-group input, .form-group select {
+    background: #111; border: 1px solid #333; color: #ccc; border-radius: 5px;
+    padding: 7px 10px; font-size: 13px;
+  }
+  .form-group input { width: 200px; }
+  .form-group select { width: 130px; }
+  .form-group .narrow { width: 80px; }
+
+  /* ── Spreadsheet table ── */
+  .sheet-wrap { overflow-x: auto; border-radius: 6px; border: 1px solid #2a2a2a; }
+
+  table.sheet { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+  table.sheet thead tr { background: #161616; }
+  table.sheet th {
+    padding: 7px 10px; text-align: left; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px; color: #555;
+    border-bottom: 1px solid #2a2a2a; border-right: 1px solid #1e1e1e;
+    white-space: nowrap; user-select: none;
+  }
+  table.sheet th:last-child { border-right: none; width: 28px; }
+
+  table.sheet td {
+    border-bottom: 1px solid #1d1d1d; border-right: 1px solid #1a1a1a;
+    padding: 0; position: relative;
+  }
+  table.sheet td:last-child { border-right: none; text-align: center; vertical-align: middle; width: 28px; }
+  table.sheet tbody tr:last-child td { border-bottom: none; }
+  table.sheet tbody tr:hover td { background: #1e1e1e; }
+
+  /* Editable cell */
+  table.sheet td .cell {
+    display: block; width: 100%; padding: 7px 10px;
+    background: transparent; border: none; color: #ccc;
+    font-size: 12px; font-family: inherit; outline: none;
+    white-space: nowrap; min-width: 60px;
+  }
+  table.sheet td .cell:focus {
+    background: #0d1a2a; color: #fff;
+    box-shadow: inset 0 0 0 2px #335;
+  }
+  table.sheet td select.cell {
+    cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+    padding-right: 22px;
+  }
+
+  .del-btn {
+    background: none; border: none; color: #3a3a3a; cursor: pointer;
+    font-size: 14px; padding: 0 6px; line-height: 1;
+  }
+  .del-btn:hover { color: #a44; }
+
+  /* Row number column */
+  table.sheet th.rn, table.sheet td.rn {
+    color: #3a3a3a; font-size: 10px; width: 26px; text-align: right;
+    padding: 7px 6px; border-right: 1px solid #222; background: #141414;
+    user-select: none; cursor: default;
+  }
+  table.sheet td.rn .cell { padding: 7px 6px; color: #3a3a3a; min-width: unset; }
+  table.sheet td.rn .cell:focus { background: transparent; box-shadow: none; }
+
+  /* Advanced columns (hidden by default) */
+  .adv-col { display: none; }
+  .adv-col.visible { display: table-cell; }
+
+  /* ── Accordion ── */
+  .accordion {
+    border: 1px solid #222; border-radius: 6px; margin-top: 12px; overflow: hidden;
+  }
+  .accordion-header {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: #161616; cursor: pointer; user-select: none; font-size: 12px; color: #666;
+  }
+  .accordion-header:hover { background: #1a1a1a; color: #999; }
+  .accordion-arrow { font-size: 10px; transition: transform 0.15s; display: inline-block; }
+  .accordion-arrow.open { transform: rotate(90deg); }
+  .accordion-body { display: none; padding: 14px; background: #141414; }
+  .accordion-body.open { display: block; }
+  .accordion-hint { font-size: 11px; color: #555; margin-bottom: 12px; line-height: 1.6; }
+
+  .meta-col-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .meta-col-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 4px;
+    padding: 4px 10px; font-size: 12px; color: #aaa; cursor: pointer;
+  }
+  .meta-col-chip.active { background: #1a2a3a; border-color: #335; color: #8af; }
+  .meta-col-chip .chip-x { color: #555; font-size: 11px; }
+  .meta-col-chip.active .chip-x { color: #558; }
+
+  .add-col-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .add-col-row input {
+    background: #111; border: 1px solid #2a2a2a; color: #ccc; border-radius: 4px;
+    padding: 5px 10px; font-size: 12px; width: 160px;
+  }
+  .add-col-row .btn-small {
+    background: #1e2e1e; border: 1px solid #2a3a2a; color: #6a6; border-radius: 4px;
+    padding: 5px 12px; font-size: 12px; cursor: pointer;
+  }
+
+  .yaml-preview {
+    background: #0e0e0e; border: 1px solid #222; border-radius: 4px;
+    padding: 12px; font-size: 11px; font-family: monospace; color: #7a9; line-height: 1.7;
+    white-space: pre; overflow-x: auto; margin-top: 12px;
+  }
+
+  /* ── Define footer ── */
+  .define-footer { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  .define-footer .hint { font-size: 11px; color: #555; }
+
+  /* ── Past experiments ── */
+  .settings-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 20px; }
+  .past-exp-list { list-style: none; margin-top: 8px; }
+  .past-exp-list li {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 0; border-bottom: 1px solid #1d1d1d; font-size: 12px;
+  }
+  .past-exp-list li:last-child { border-bottom: none; }
+  .past-exp-list .exp-name { color: #bbb; flex: 1; }
+  .past-exp-list .exp-meta { color: #555; font-size: 11px; }
+  .past-exp-list .exp-action {
+    color: #558; font-size: 11px; cursor: pointer; padding: 3px 8px;
+    border: 1px solid #334; border-radius: 4px;
+  }
+  .past-exp-list .exp-action:hover { color: #88c; border-color: #559; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; }
+  .tag.running { background: #1c3a1c; color: #5d5; }
+  .tag.stopped { background: #222; color: #666; }
+
+  /* ── Live view ── */
+  #live-page { display: none; flex: 1; flex-direction: column; gap: 20px; padding: 24px; overflow-y: auto; }
+  .plot-placeholder {
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px;
+    height: 280px; display: flex; align-items: center; justify-content: center;
+    color: #444; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div class="nav-logo">ODMeter</div>
+  <button class="nav-btn active" onclick="showDashboard()">Dashboard</button>
+  <button class="nav-btn" onclick="showLive(null)">Live</button>
+  <button class="nav-btn">Diagnostics</button>
+</nav>
+
+<!-- ── Dashboard ── -->
+<main id="main">
+
+  <div id="status-banner">
+    <div class="status-dot"></div>
+    <div>
+      <div class="status-title">growth_run_042</div>
+      <div class="status-sub">user: alice · interval: 30 s · running for 2 h 14 m · 8 samples</div>
+    </div>
+    <div class="banner-controls">
+      <button class="btn btn-live" onclick="showLive('growth_run_042')">View Live Plots →</button>
+      <button class="btn btn-stop">Stop</button>
+      <button class="btn btn-close" disabled>Close</button>
+    </div>
+  </div>
+
+  <div class="two-col">
+
+    <!-- Define panel -->
+    <div id="define-panel">
+      <div class="section-header">Define New Experiment</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Experiment Name</label>
+          <input type="text" placeholder="e.g. growth_run_043">
+        </div>
+        <div class="form-group">
+          <label>User</label>
+          <select>
+            <option>alice</option><option>bob</option><option>carol</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Interval (s)</label>
+          <input class="narrow" type="number" value="30" min="5">
+        </div>
+      </div>
+
+      <!-- Spreadsheet -->
+      <div class="sheet-wrap">
+        <table class="sheet" id="sheet">
+          <thead>
+            <tr>
+              <th class="rn"></th>
+              <th>Device</th>
+              <th>Channel</th>
+              <th>Sample Name</th>
+              <!-- advanced cols -->
+              <th class="adv-col" data-col="strain">Strain</th>
+              <th class="adv-col" data-col="condition">Condition</th>
+              <th class="adv-col" data-col="replicate">Replicate</th>
+              <th class="adv-col" data-col="group">Group</th>
+              <th class="adv-col" data-col="std_curve">Std Curve</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="sheet-body">
+            <tr>
+              <td class="rn"><input class="cell" value="1" readonly tabindex="-1"></td>
+              <td><select class="cell"><option>2</option><option>3</option></select></td>
+              <td><select class="cell"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></td>
+              <td><input class="cell" type="text" placeholder="Sample name"></td>
+              <td class="adv-col" data-col="strain"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="condition"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="replicate"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="group"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="std_curve"><select class="cell"><option>E. coli 600nm</option><option>Yeast 600nm</option><option>(none)</option></select></td>
+              <td><button class="del-btn" onclick="delRow(this)">✕</button></td>
+            </tr>
+            <tr>
+              <td class="rn"><input class="cell" value="2" readonly tabindex="-1"></td>
+              <td><select class="cell"><option>2</option><option>3</option></select></td>
+              <td><select class="cell"><option>2</option><option>1</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></td>
+              <td><input class="cell" type="text" placeholder="Sample name"></td>
+              <td class="adv-col" data-col="strain"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="condition"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="replicate"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="group"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="std_curve"><select class="cell"><option>E. coli 600nm</option><option>Yeast 600nm</option><option>(none)</option></select></td>
+              <td><button class="del-btn" onclick="delRow(this)">✕</button></td>
+            </tr>
+            <tr>
+              <td class="rn"><input class="cell" value="3" readonly tabindex="-1"></td>
+              <td><select class="cell"><option>3</option><option>2</option></select></td>
+              <td><select class="cell"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></td>
+              <td><input class="cell" type="text" placeholder="Sample name"></td>
+              <td class="adv-col" data-col="strain"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="condition"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="replicate"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="group"><input class="cell" type="text" placeholder=""></td>
+              <td class="adv-col" data-col="std_curve"><select class="cell"><option>E. coli 600nm</option><option>Yeast 600nm</option><option>(none)</option></select></td>
+              <td><button class="del-btn" onclick="delRow(this)">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <button class="btn-add" onclick="addRow()">+ Add row</button>
+      </div>
+
+      <!-- Advanced accordion -->
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion()">
+          <span class="accordion-arrow" id="acc-arrow">▶</span>
+          Advanced — Metadata columns
+          <span style="margin-left:auto; font-size:11px; color:#444;" id="acc-hint">saved to Data/&lt;name&gt;_config.yaml</span>
+        </div>
+        <div class="accordion-body" id="acc-body">
+          <p class="accordion-hint">
+            Toggle columns to include in the sample sheet. Values are saved alongside
+            device/channel/name in <code style="color:#7a9">Data/&lt;experiment_name&gt;_config.yaml</code>
+            and will be available in the Live view to colour or group traces.
+          </p>
+          <div class="meta-col-list" id="col-chips">
+            <div class="meta-col-chip active" data-col="strain" onclick="toggleCol(this)">
+              Strain <span class="chip-x">✕</span>
+            </div>
+            <div class="meta-col-chip active" data-col="condition" onclick="toggleCol(this)">
+              Condition <span class="chip-x">✕</span>
+            </div>
+            <div class="meta-col-chip active" data-col="replicate" onclick="toggleCol(this)">
+              Replicate <span class="chip-x">✕</span>
+            </div>
+            <div class="meta-col-chip active" data-col="group" onclick="toggleCol(this)">
+              Group <span class="chip-x">✕</span>
+            </div>
+            <div class="meta-col-chip active" data-col="std_curve" onclick="toggleCol(this)">
+              Std Curve <span class="chip-x">✕</span>
+            </div>
+          </div>
+          <div class="add-col-row">
+            <input type="text" id="new-col-input" placeholder="New column name…" onkeydown="if(event.key==='Enter') addCol()">
+            <button class="btn-small" onclick="addCol()">+ Add column</button>
+          </div>
+          <div class="yaml-preview" id="yaml-preview">experiment: growth_run_043
+samples:
+  - device: "2"
+    channel: 1
+    name: "WT control A"
+    strain: "MG1655"
+    condition: "LB"
+    replicate: 1
+    group: "control"
+    std_curve: "E. coli 600nm"
+  - device: "2"
+    channel: 2
+    name: "WT control B"
+    strain: "MG1655"
+    condition: "LB"
+    replicate: 2
+    group: "control"
+    std_curve: "E. coli 600nm"</div>
+        </div>
+      </div>
+
+      <div class="define-footer">
+        <button class="btn btn-create">Create &amp; Start</button>
+        <span class="hint">Stops any running experiment first</span>
+      </div>
+    </div>
+
+    <!-- Past experiments -->
+    <div class="settings-card">
+      <div class="section-header">Past Experiments</div>
+      <ul class="past-exp-list">
+        <li>
+          <span class="exp-name">growth_run_042</span>
+          <span class="tag running">running</span>
+          <span class="exp-meta">alice · 2 h 14 m</span>
+          <span class="exp-action" onclick="showLive('growth_run_042')">View plots →</span>
+        </li>
+        <li>
+          <span class="exp-name">growth_run_041</span>
+          <span class="tag stopped">stopped</span>
+          <span class="exp-meta">alice · 18 h 03 m</span>
+          <span class="exp-action" onclick="showLive('growth_run_041')">View plots →</span>
+        </li>
+        <li>
+          <span class="exp-name">mutant_screen_007</span>
+          <span class="tag stopped">stopped</span>
+          <span class="exp-meta">bob · 6 h 51 m</span>
+          <span class="exp-action" onclick="showLive('mutant_screen_007')">View plots →</span>
+        </li>
+        <li>
+          <span class="exp-name">calibration_test</span>
+          <span class="tag stopped">stopped</span>
+          <span class="exp-meta">carol · 0 h 12 m</span>
+          <span class="exp-action" onclick="showLive('calibration_test')">View plots →</span>
+        </li>
+        <li>
+          <span class="exp-name">growth_run_040</span>
+          <span class="tag stopped">stopped</span>
+          <span class="exp-meta">alice · 22 h 17 m</span>
+          <span class="exp-action" onclick="showLive('growth_run_040')">View plots →</span>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+</main>
+
+<!-- ── Live view ── -->
+<div id="live-page">
+  <div class="page-header">
+    <button class="back-btn" onclick="showDashboard()">← Dashboard</button>
+    <span class="page-title" id="live-title">Live View</span>
+  </div>
+  <div class="plot-placeholder">OD vs Time — placeholder</div>
+  <div class="plot-placeholder">Growth rate — placeholder</div>
+</div>
+
+<script>
+  // ── Navigation ──
+  function showDashboard() {
+    document.getElementById("main").style.display = "flex";
+    document.getElementById("live-page").style.display = "none";
+    setActiveNav(0);
+  }
+  function showLive(name) {
+    document.getElementById("main").style.display = "none";
+    const lp = document.getElementById("live-page");
+    lp.style.display = "flex";
+    document.getElementById("live-title").textContent = (name || "Live") + " — Live View";
+    setActiveNav(1);
+  }
+  function setActiveNav(i) {
+    document.querySelectorAll(".nav-btn").forEach((b,j) => b.classList.toggle("active", i===j));
+  }
+
+  // ── Accordion ──
+  function toggleAccordion() {
+    const body  = document.getElementById("acc-body");
+    const arrow = document.getElementById("acc-arrow");
+    const open  = body.classList.toggle("open");
+    arrow.classList.toggle("open", open);
+  }
+
+  // ── Column toggle chips ──
+  function toggleCol(chip) {
+    const col    = chip.dataset.col;
+    const active = chip.classList.toggle("active");
+    // show/hide header and body cells
+    document.querySelectorAll(`[data-col="${col}"]`).forEach(el => {
+      el.classList.toggle("visible", active);
+    });
+  }
+
+  // Apply initial state: all active cols visible
+  document.querySelectorAll(".meta-col-chip.active").forEach(chip => {
+    const col = chip.dataset.col;
+    document.querySelectorAll(`[data-col="${col}"]`).forEach(el => el.classList.add("visible"));
+  });
+
+  // ── Add custom column ──
+  let customColCount = 0;
+  function addCol() {
+    const input = document.getElementById("new-col-input");
+    const name  = input.value.trim();
+    if (!name) return;
+    const key = name.toLowerCase().replace(/\s+/g, "_");
+
+    // Header
+    const thead = document.querySelector("#sheet thead tr");
+    const delTh = thead.lastElementChild;
+    const th = document.createElement("th");
+    th.className = "adv-col visible";
+    th.dataset.col = key;
+    th.textContent = name;
+    thead.insertBefore(th, delTh);
+
+    // Each body row
+    document.querySelectorAll("#sheet-body tr").forEach(row => {
+      const delTd = row.lastElementChild;
+      const td = document.createElement("td");
+      td.className = "adv-col visible";
+      td.dataset.col = key;
+      td.innerHTML = `<input class="cell" type="text" placeholder="">`;
+      row.insertBefore(td, delTd);
+    });
+
+    // Chip
+    const chips = document.getElementById("col-chips");
+    const chip  = document.createElement("div");
+    chip.className = "meta-col-chip active";
+    chip.dataset.col = key;
+    chip.innerHTML = `${name} <span class="chip-x">✕</span>`;
+    chip.onclick = () => toggleCol(chip);
+    chips.appendChild(chip);
+
+    input.value = "";
+  }
+
+  // ── Add/delete rows ──
+  let rowCount = 3;
+  function addRow() {
+    rowCount++;
+    const tbody = document.getElementById("sheet-body");
+    const activeCols = Array.from(document.querySelectorAll("#sheet thead th.adv-col.visible"))
+                            .map(th => th.dataset.col);
+
+    const isSelect = col => col === "std_curve";
+    const stdCurveOpts = `<option>E. coli 600nm</option><option>Yeast 600nm</option><option>(none)</option>`;
+
+    // Build advanced cells
+    const advCells = Array.from(document.querySelectorAll("#sheet thead th.adv-col")).map(th => {
+      const col = th.dataset.col;
+      const vis = th.classList.contains("visible") ? " visible" : "";
+      const inner = isSelect(col)
+        ? `<select class="cell">${stdCurveOpts}</select>`
+        : `<input class="cell" type="text" placeholder="">`;
+      return `<td class="adv-col${vis}" data-col="${col}">${inner}</td>`;
+    }).join("");
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="rn"><input class="cell" value="${rowCount}" readonly tabindex="-1"></td>
+      <td><select class="cell"><option>2</option><option>3</option></select></td>
+      <td><select class="cell"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></td>
+      <td><input class="cell" type="text" placeholder="Sample name"></td>
+      ${advCells}
+      <td><button class="del-btn" onclick="delRow(this)">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  function delRow(btn) {
+    const row = btn.closest("tr");
+    row.remove();
+    // Renumber
+    document.querySelectorAll("#sheet-body tr").forEach((tr, i) => {
+      tr.querySelector(".rn input").value = i + 1;
+    });
+    rowCount = document.querySelectorAll("#sheet-body tr").length;
+  }
+</script>
+</body>
+</html>

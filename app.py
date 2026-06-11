@@ -86,6 +86,55 @@ def subsample_df(df, max_points=MAX_POINTS):
     return pd.concat(parts, ignore_index=True) if parts else df
 
 
+# Plotly's default discrete colour sequence
+_PLOTLY_COLORS = [
+    "#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A",
+    "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52",
+]
+
+def _trace_color(i):
+    return _PLOTLY_COLORS[i % len(_PLOTLY_COLORS)]
+
+
+def _legend_pills(trace_names, store_id, graph_id):
+    """Row of colored pill buttons + a Reset button for custom legend control."""
+    pills = []
+    for i, name in enumerate(trace_names):
+        color = _trace_color(i)
+        pills.append(html.Button(
+            name,
+            id={"type": store_id + "-btn", "index": graph_id, "trace": i},
+            n_clicks=0,
+            style={
+                "background": color,
+                "color": "#fff",
+                "border": "none",
+                "borderRadius": "12px",
+                "padding": "3px 12px",
+                "marginRight": "6px",
+                "marginBottom": "4px",
+                "fontSize": "12px",
+                "cursor": "pointer",
+                "opacity": "1",
+            },
+        ))
+    pills.append(html.Button(
+        "Reset",
+        id={"type": store_id + "-reset", "index": graph_id},
+        n_clicks=0,
+        style={
+            "background": "#eee",
+            "color": "#333",
+            "border": "1px solid #ccc",
+            "borderRadius": "12px",
+            "padding": "3px 10px",
+            "fontSize": "12px",
+            "cursor": "pointer",
+        },
+    ))
+    return html.Div(pills, style={"padding": "4px 8px 0"})
+
+
 def make_plots(df, graph_id_type=None, x_range=None, y_scale="linear"):
     """One dcc.Graph per device, one trace per sample_name."""
     df = df.copy()
@@ -93,22 +142,24 @@ def make_plots(df, graph_id_type=None, x_range=None, y_scale="linear"):
     plots = []
     for device in sorted(df["device"].unique()):
         dev_df = df[df["device"] == device]
+        sample_names = sorted(dev_df["sample_name"].unique())
         fig = go.Figure()
-        for sample_name in sorted(dev_df["sample_name"].unique()):
+        for i, sample_name in enumerate(sample_names):
             s = dev_df[dev_df["sample_name"] == sample_name].sort_values("t_min")
             fig.add_trace(go.Scatter(
                 x=s["t_min"],
                 y=s["converted_od"],
                 mode="lines+markers",
                 name=sample_name,
+                line={"color": _trace_color(i)},
+                marker={"color": _trace_color(i)},
             ))
         layout = dict(
             title=f"Device {device}",
             xaxis_title="Time (min)",
             yaxis_title="Converted OD",
-            legend_title="Sample",
-            legend={"itemclick": "toggleothers", "itemdoubleclick": "toggle"},
-            height=420,
+            showlegend=False,
+            height=400,
             margin={"l": 60, "r": 20, "t": 50, "b": 50},
         )
         if y_scale == "log":
@@ -120,16 +171,15 @@ def make_plots(df, graph_id_type=None, x_range=None, y_scale="linear"):
         if x_range is not None:
             layout["xaxis_range"] = x_range
         fig.update_layout(**layout)
-        graph_props = {}
-        if graph_id_type:
-            graph_props["id"] = {"type": graph_id_type, "index": device}
-        if graph_id_type == "browser-graph":
-            n_traces = len(dev_df["sample_name"].unique())
-            plots.append(dcc.Store(
-                id={"type": "od-legend-state", "index": device},
-                data=list(range(n_traces)),
-            ))
-        plots.append(dcc.Graph(figure=fig, **graph_props))
+
+        graph_id = {"type": graph_id_type or "live-graph", "index": device}
+        store_type = "od-legend-state" if graph_id_type == "browser-graph" else "live-legend-state"
+        plots.append(dcc.Store(
+            id={"type": store_type, "index": device},
+            data=list(range(len(sample_names))),
+        ))
+        plots.append(_legend_pills(sample_names, store_type, device))
+        plots.append(dcc.Graph(id=graph_id, figure=fig))
     return plots
 
 
@@ -140,8 +190,9 @@ def make_growth_rate_plots(gr_df, max_points=MAX_POINTS):
     plots = []
     for device in sorted(gr_df["device"].unique()):
         dev_df = gr_df[gr_df["device"] == device]
+        sample_names = sorted(dev_df["sample_name"].unique())
         fig = go.Figure()
-        for sample_name in sorted(dev_df["sample_name"].unique()):
+        for i, sample_name in enumerate(sample_names):
             s = (
                 dev_df[dev_df["sample_name"] == sample_name]
                 .sort_values("t_min")
@@ -155,21 +206,21 @@ def make_growth_rate_plots(gr_df, max_points=MAX_POINTS):
                 y=s["growth_rate"],
                 mode="lines",
                 name=sample_name,
+                line={"color": _trace_color(i)},
             ))
         fig.update_layout(
             title=f"Device {device} — Growth Rate",
             xaxis_title="Time (min)",
             yaxis_title="Growth rate (ln OD / hr)",
-            legend_title="Sample",
-            legend={"itemclick": "toggleothers", "itemdoubleclick": "toggle"},
-            height=380,
+            showlegend=False,
+            height=360,
             margin={"l": 60, "r": 20, "t": 50, "b": 50},
         )
-        n_traces = len(dev_df["sample_name"].unique())
         plots.append(dcc.Store(
             id={"type": "gr-legend-state", "index": device},
-            data=list(range(n_traces)),
+            data=list(range(len(sample_names))),
         ))
+        plots.append(_legend_pills(sample_names, "gr-legend-state", device))
         plots.append(dcc.Graph(id={"type": "gr-graph", "index": device}, figure=fig))
     return plots
 
@@ -856,91 +907,89 @@ def download_csv(_):
     return dcc.send_file(ctx.triggered_id["index"])
 
 
-def _apply_legend_click(restyle, figure, prev_visible_list):
+def _apply_pill_click(btn_clicks, reset_clicks, figure, visible_list):
     """
-    Custom legend-click logic on top of Plotly's toggleothers:
-      - First click on any trace: isolate it (all others hidden).
-      - While isolated, click a hidden trace: add it to the visible set.
-      - While isolated, click the only visible trace: restore all.
-    Returns (figure_patch_or_no_update, new_visible_list).
+    Pill-button legend logic (called for both OD and growth-rate graphs):
+      - Click a visible trace while others also visible → isolate it
+      - Click the only visible trace → restore all
+      - Click a hidden trace → add it to the visible set
+      - Click Reset → restore all
     """
-    if not restyle or not figure:
-        return dash.no_update, dash.no_update
-
-    # figure State is stale — it only reflects the last Dash-callback-set value,
-    # not Plotly's internal visual state after user interactions.
-    # restyleData is authoritative: it carries exactly what Plotly just changed.
-    try:
-        changes, changed_indices = restyle[0], restyle[1]
-    except (IndexError, TypeError):
-        return dash.no_update, dash.no_update
-
-    if "visible" not in changes:
+    if not figure:
         return dash.no_update, dash.no_update
 
     n = len(figure["data"])
     all_i = set(range(n))
-    prev_visible = set(prev_visible_list) if prev_visible_list is not None else all_i
+    visible = set(visible_list) if visible_list is not None else all_i
 
-    # Derive current_visible by applying restyleData on top of prev_visible
-    current_visible = set(prev_visible)
-    for idx, val in zip(changed_indices, changes["visible"]):
-        if val == "legendonly" or val is False:
-            current_visible.discard(idx)
+    triggered = ctx.triggered_id
+    if triggered is None:
+        return dash.no_update, dash.no_update
+
+    # Reset button
+    if isinstance(triggered, dict) and "reset" in triggered.get("type", ""):
+        patch = Patch()
+        for i in range(n):
+            patch["data"][i]["visible"] = True
+        return patch, list(all_i)
+
+    # Pill button — which trace index?
+    trace_idx = int(triggered["trace"])
+
+    if trace_idx in visible:
+        if len(visible) == 1:
+            # Only trace visible → restore all
+            new_visible = all_i
         else:
-            current_visible.add(idx)
+            # Isolate this trace
+            new_visible = {trace_idx}
+    else:
+        # Hidden trace → add to visible set
+        new_visible = visible | {trace_idx}
 
-    if current_visible == all_i:
-        return dash.no_update, list(all_i)
-
-    if not current_visible:
-        patch = Patch()
-        for i in range(n):
-            patch["data"][i]["visible"] = True
-        return patch, list(all_i)
-
-    if prev_visible == current_visible:
-        # Clicked the only visible trace → restore all
-        patch = Patch()
-        for i in range(n):
-            patch["data"][i]["visible"] = True
-        return patch, list(all_i)
-
-    new_additions = current_visible - prev_visible
-    if new_additions and len(prev_visible) < n:
-        # Clicked a hidden trace while isolated → add it
-        merged = prev_visible | current_visible
-        patch = Patch()
-        for i in range(n):
-            patch["data"][i]["visible"] = True if i in merged else "legendonly"
-        return patch, list(merged)
-
-    # Standard isolation click (from all-visible state)
-    return dash.no_update, list(current_visible)
+    patch = Patch()
+    for i in range(n):
+        patch["data"][i]["visible"] = True if i in new_visible else "legendonly"
+    return patch, list(new_visible)
 
 
 @app.callback(
     Output({"type": "browser-graph", "index": MATCH}, "figure"),
     Output({"type": "od-legend-state", "index": MATCH}, "data"),
-    Input({"type": "browser-graph", "index": MATCH}, "restyleData"),
+    Input({"type": "od-legend-state-btn", "index": MATCH, "trace": ALL}, "n_clicks"),
+    Input({"type": "od-legend-state-reset", "index": MATCH}, "n_clicks"),
     State({"type": "browser-graph", "index": MATCH}, "figure"),
     State({"type": "od-legend-state", "index": MATCH}, "data"),
     prevent_initial_call=True,
 )
-def handle_od_legend_click(restyle, figure, prev_visible):
-    return _apply_legend_click(restyle, figure, prev_visible)
+def handle_od_pill_click(btn_clicks, reset_clicks, figure, visible_list):
+    return _apply_pill_click(btn_clicks, reset_clicks, figure, visible_list)
+
+
+@app.callback(
+    Output({"type": "live-graph", "index": MATCH}, "figure"),
+    Output({"type": "live-legend-state", "index": MATCH}, "data"),
+    Input({"type": "live-legend-state-btn", "index": MATCH, "trace": ALL}, "n_clicks"),
+    Input({"type": "live-legend-state-reset", "index": MATCH}, "n_clicks"),
+    State({"type": "live-graph", "index": MATCH}, "figure"),
+    State({"type": "live-legend-state", "index": MATCH}, "data"),
+    prevent_initial_call=True,
+)
+def handle_live_pill_click(btn_clicks, reset_clicks, figure, visible_list):
+    return _apply_pill_click(btn_clicks, reset_clicks, figure, visible_list)
 
 
 @app.callback(
     Output({"type": "gr-graph", "index": MATCH}, "figure"),
     Output({"type": "gr-legend-state", "index": MATCH}, "data"),
-    Input({"type": "gr-graph", "index": MATCH}, "restyleData"),
+    Input({"type": "gr-legend-state-btn", "index": MATCH, "trace": ALL}, "n_clicks"),
+    Input({"type": "gr-legend-state-reset", "index": MATCH}, "n_clicks"),
     State({"type": "gr-graph", "index": MATCH}, "figure"),
     State({"type": "gr-legend-state", "index": MATCH}, "data"),
     prevent_initial_call=True,
 )
-def handle_gr_legend_click(restyle, figure, prev_visible):
-    return _apply_legend_click(restyle, figure, prev_visible)
+def handle_gr_pill_click(btn_clicks, reset_clicks, figure, visible_list):
+    return _apply_pill_click(btn_clicks, reset_clicks, figure, visible_list)
 
 
 @app.callback(

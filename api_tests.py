@@ -242,10 +242,17 @@ class ODMeterTester:
         write endpoint, then deletes everything. Safe to run repeatedly.
         """
         results: list[TestResult] = []
+
+        # Check server is reachable before attempting any writes
+        _, _, _, err = self._req("get", "/device/")
+        if err:
+            return [TestResult("write/connect", "/api/device/", "GET", False,
+                               detail=f"Server unreachable: {err}")]
+
         dev_label, ch_num = self._free_channel()
         if dev_label is None:
             return [TestResult("write/free-channel", "/api/device/", "GET", False,
-                               detail="No free channel — all occupied")]
+                               detail="No free channel — all occupied or all devices are in active experiments")]
 
         user, sc_name, _ = self._config_defaults()
         sample_uuid       = None
@@ -367,9 +374,11 @@ class ODMeterTester:
         if targets is None:
             targets = INTERVAL_TARGETS
 
-        # Guard: no running experiments
-        exps, _, _, _ = self._req("get", "/acqusition/")
-        if any(e.get("is_running") for e in (exps or [])):
+        # Guard: server reachable + no running experiments
+        exps, _, _, err = self._req("get", "/acqusition/")
+        if exps is None:
+            return [IntervalResult(0, error=f"Server unreachable: {err}")]
+        if any(e.get("is_running") for e in exps):
             return [IntervalResult(0, error="An experiment is already running — stop it first")]
 
         dev_label, ch_num = self._free_channel()

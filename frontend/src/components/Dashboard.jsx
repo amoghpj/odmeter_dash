@@ -135,7 +135,7 @@ export default function Dashboard({ onViewLive, runningExp }) {
     getConfig()
       .then((data) => {
         setGoConfig(data);
-        if (data?.users?.length) setUser(data.users[0]);
+        if (data?.users?.length) setUser(data.users[0].name);
       })
       .catch((err) => console.warn('getConfig error:', err));
 
@@ -230,7 +230,7 @@ export default function Dashboard({ onViewLive, runningExp }) {
   };
 
   const stdCurves = goConfig?.standard_curves
-    ? Object.keys(goConfig.standard_curves)
+    ? goConfig.standard_curves.map((sc) => sc.name)
     : [];
   const users = goConfig?.users || [];
 
@@ -269,8 +269,8 @@ export default function Dashboard({ onViewLive, runningExp }) {
                 >
                   {users.length === 0 && <option value="">—</option>}
                   {users.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
+                    <option key={u.name} value={u.name}>
+                      {u.name}
                     </option>
                   ))}
                 </select>

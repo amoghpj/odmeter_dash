@@ -28,8 +28,47 @@ import growth_rates
 # ── configuration ─────────────────────────────────────────────────────────────
 
 GO_API = os.environ.get("GO_API", "http://127.0.0.1:8080")
+# DATA_DIR is the fallback when Go config cannot be reached.
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent / "Data"))
 FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
+
+
+def _resolve_data_dirs() -> list[Path]:
+    """
+    Query Go /api/config/ for each user's data_path.
+    Falls back to DATA_DIR if Go is unreachable or returns no paths.
+    """
+    if os.environ.get("DATA_DIR"):
+        # Explicit override — use it directly.
+        return [DATA_DIR]
+    try:
+        resp = httpx.get(f"{GO_API}/api/config/", timeout=3.0)
+        if resp.status_code == 200:
+            cfg = resp.json() or {}
+            dirs: list[Path] = []
+            for u in cfg.get("users") or []:
+                dp = (u.get("data_path") or "").strip()
+                if dp:
+                    dirs.append(Path(dp).expanduser())
+            if dirs:
+                print(f"[data_service] data dirs from Go config: {dirs}", file=sys.stderr)
+                return dirs
+    except Exception as exc:
+        print(f"[data_service] cannot reach Go config ({exc}), falling back to {DATA_DIR}",
+              file=sys.stderr)
+    return [DATA_DIR]
+
+
+DATA_DIRS: list[Path] = _resolve_data_dirs()
+
+
+def _find_csv(name: str) -> Path | None:
+    """Return the first existing {name}.csv across all DATA_DIRS, or None."""
+    for d in DATA_DIRS:
+        p = d / f"{name}.csv"
+        if p.exists():
+            return p
+    return None
 
 PLOT_COLS = ["t_min", "converted_od", "device", "sample_name"]
 MAX_POINTS = 500
@@ -213,25 +252,28 @@ async def proxy_api(path: str, request: Request):
 
 @app.get("/svc/experiments")
 async def list_experiments():
-    if not DATA_DIR.is_dir():
-        return JSONResponse([])
-
     results = []
-    for csv_path in sorted(DATA_DIR.glob("*.csv")):
-        stat = csv_path.stat()
-        meta = parse_csv_metadata(str(csv_path))
-        entry: dict = {
-            "name": csv_path.stem,
-            "size_bytes": stat.st_size,
-            "has_meta": meta is not None,
-        }
-        if meta:
-            if "time_started" in meta:
-                entry["time_started"] = meta["time_started"]
-            if "sample_info" in meta:
-                entry["sample_count"] = len(meta["sample_info"])
-        results.append(entry)
-
+    seen: set[str] = set()
+    for data_dir in DATA_DIRS:
+        if not data_dir.is_dir():
+            continue
+        for csv_path in sorted(data_dir.glob("*.csv")):
+            if csv_path.stem in seen:
+                continue
+            seen.add(csv_path.stem)
+            stat = csv_path.stat()
+            meta = parse_csv_metadata(str(csv_path))
+            entry: dict = {
+                "name": csv_path.stem,
+                "size_bytes": stat.st_size,
+                "has_meta": meta is not None,
+            }
+            if meta:
+                if "time_started" in meta:
+                    entry["time_started"] = meta["time_started"]
+                if "sample_info" in meta:
+                    entry["sample_count"] = len(meta["sample_info"])
+            results.append(entry)
     return JSONResponse(results)
 
 
@@ -239,9 +281,10 @@ async def list_experiments():
 
 @app.get("/svc/data/{name}")
 async def get_data(name: str, max_points: int = MAX_POINTS):
-    filepath = str(DATA_DIR / f"{name}.csv")
-    if not os.path.exists(filepath):
+    csv_path = _find_csv(name)
+    if csv_path is None:
         return JSONResponse({"error": f"File not found: {name}.csv"}, status_code=404)
+    filepath = str(csv_path)
 
     df, err = get_full_csv_data(filepath)
     if df is None:
@@ -271,7 +314,9 @@ async def get_data(name: str, max_points: int = MAX_POINTS):
 
 @app.get("/svc/config/{name}")
 async def get_config(name: str):
-    config_path = DATA_DIR / f"{name}_config.yaml"
+    csv_path = _find_csv(name)
+    base_dir = csv_path.parent if csv_path else DATA_DIRS[0]
+    config_path = base_dir / f"{name}_config.yaml"
     if not config_path.exists():
         return JSONResponse({})
     try:
@@ -289,8 +334,10 @@ async def save_config(name: str, request: Request):
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    config_path = DATA_DIR / f"{name}_config.yaml"
+    csv_path = _find_csv(name)
+    base_dir = csv_path.parent if csv_path else DATA_DIRS[0]
+    base_dir.mkdir(parents=True, exist_ok=True)
+    config_path = base_dir / f"{name}_config.yaml"
     try:
         with open(config_path, "w") as f:
             yaml.dump(body, f, default_flow_style=False)
@@ -303,9 +350,10 @@ async def save_config(name: str, request: Request):
 
 @app.get("/svc/growth-rates/{name}")
 async def get_growth_rates(name: str):
-    filepath = str(DATA_DIR / f"{name}.csv")
-    if not os.path.exists(filepath):
+    csv_path = _find_csv(name)
+    if csv_path is None:
         return JSONResponse({"error": f"File not found: {name}.csv"}, status_code=404)
+    filepath = str(csv_path)
 
     status = growth_rates.get_status(filepath)
 

@@ -24,9 +24,9 @@ const AXIS_STYLE = {
 };
 
 /**
- * Build Plotly traces for a single device from rows data.
- * rows: [{device, channel, t, od, ...}]
- * Returns [{name, x, y, colorIndex}]
+ * Build Plotly traces for a single device.
+ * Rows from /svc/data have {t_min, converted_od, device, channel, sample_name}.
+ * Live WS rows are normalised to the same shape before being merged in.
  */
 function buildTraces(rows, device) {
   const byChannel = {};
@@ -34,20 +34,20 @@ function buildTraces(rows, device) {
     if (row.device !== device) return;
     const key = row.channel;
     if (!byChannel[key]) byChannel[key] = { x: [], y: [], channel: key };
-    byChannel[key].x.push(row.t ?? row.time ?? row.timestamp);
-    byChannel[key].y.push(row.od ?? row.value ?? null);
+    byChannel[key].x.push(row.t_min ?? null);
+    byChannel[key].y.push(row.converted_od ?? null);
   });
   return Object.values(byChannel).sort((a, b) => a.channel - b.channel);
 }
 
 /**
- * Merge hist rows and live rows, deduplicating by (device, channel, t).
+ * Merge hist rows and live rows, deduplicating by (device, channel, t_min).
  */
 function mergeRows(hist, live) {
   const seen = new Set();
   const result = [];
   [...hist, ...live].forEach((r) => {
-    const key = `${r.device}|${r.channel}|${r.t ?? r.time ?? r.timestamp}`;
+    const key = `${r.device}|${r.channel}|${r.t_min ?? r.t}`;
     if (!seen.has(key)) {
       seen.add(key);
       result.push(r);
@@ -127,7 +127,7 @@ function DeviceChart({ device, traces, sampleNames, yScale }) {
 
   const layout = {
     ...DARK_LAYOUT,
-    xaxis: { ...AXIS_STYLE, title: 'Time' },
+    xaxis: { ...AXIS_STYLE, title: 'Time (min)' },
     yaxis: {
       ...AXIS_STYLE,
       title: 'OD',
@@ -194,7 +194,7 @@ function GrowthRateChart({ device, traces, sampleNames }) {
 
   const layout = {
     ...DARK_LAYOUT,
-    xaxis: { ...AXIS_STYLE, title: 'Time' },
+    xaxis: { ...AXIS_STYLE, title: 'Time (min)' },
     yaxis: { ...AXIS_STYLE, title: 'Growth rate (h⁻¹)' },
     height: 240,
   };
@@ -237,6 +237,7 @@ export default function LiveView({ expName, onBack }) {
 
   const wsRef = useRef(null);
   const growthPollRef = useRef(null);
+  const timeStartedRef = useRef(null); // ISO string; used to convert live t → t_min
 
   // Build sample name map: {device: {channel: sampleName}}
   const sampleNames = {};
@@ -253,15 +254,16 @@ export default function LiveView({ expName, onBack }) {
     Promise.all([
       getExperimentData(expName, 500).catch((e) => {
         console.warn('getExperimentData error:', e);
-        return [];
+        return null;
       }),
       getConfig(expName).catch(() => null),
     ]).then(([data, cfg]) => {
-      // data can be array of rows or {rows: [...], meta: {...}}
-      if (Array.isArray(data)) {
-        setHistData(data);
-      } else if (data?.rows) {
+      if (data?.rows) {
         setHistData(data.rows);
+        // Store experiment start time so the WS handler can compute t_min
+        if (data.meta?.time_started) {
+          timeStartedRef.current = data.meta.time_started;
+        }
       } else {
         setHistData([]);
       }
@@ -280,11 +282,23 @@ export default function LiveView({ expName, onBack }) {
     const handleMessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'NewReadings' || msg.event === 'NewReadings') {
-          const readings = msg.data ?? msg.readings ?? [];
+        if (msg.eventType === 'NewReadings') {
+          const readings = msg.readings ?? [];
           if (!Array.isArray(readings)) return;
+          // If we have no historical start time, use the first reading as t0
+          if (!timeStartedRef.current && readings[0]?.t) {
+            timeStartedRef.current = readings[0].t;
+          }
+          const t0 = timeStartedRef.current
+            ? new Date(timeStartedRef.current).getTime()
+            : null;
           setLiveRows((prev) => {
-            const newRows = readings.filter((r) => r !== null && r !== undefined);
+            const newRows = readings
+              .filter((r) => r !== null && r !== undefined)
+              .map((r) => ({
+                ...r,
+                t_min: t0 ? (new Date(r.t).getTime() - t0) / 60000 : null,
+              }));
             return mergeRows(prev, newRows);
           });
         }

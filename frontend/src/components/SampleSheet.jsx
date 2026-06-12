@@ -219,6 +219,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
                   )}
                   <td style={{ textAlign: 'center' }}>
                     <button
+                      type="button"
                       className="btn-del-row"
                       onClick={() => deleteRow(row.id)}
                       title="Remove row"
@@ -233,7 +234,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
         </table>
       </div>
 
-      <button className="btn-add-row" onClick={addRow}>
+      <button type="button" className="btn-add-row" onClick={addRow}>
         + Add row
       </button>
 
@@ -255,6 +256,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
           <div className="chips-row">
             {allMetaCols.map((col) => (
               <button
+                type="button"
                 key={col}
                 className={`chip ${activeCols.has(col) ? 'active' : ''}`}
                 onClick={() => toggleCol(col)}
@@ -271,7 +273,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
               onChange={(e) => setNewColName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addCustomCol()}
             />
-            <button className="btn btn-close btn-sm" onClick={addCustomCol}>
+            <button type="button" className="btn btn-close btn-sm" onClick={addCustomCol}>
               + Add column
             </button>
           </div>

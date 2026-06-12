@@ -270,18 +270,14 @@ export default function LiveView({ expName, onBack }) {
     });
   }, [expName]);
 
-  // WebSocket connection
+  // WebSocket connection with auto-reconnect
   useEffect(() => {
-    const wsUrl = `ws://${window.location.hostname}:8080/api/ws/`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    setWsStatus('connecting');
+    let ws = null;
+    let retryTimerId = null;
+    let unmounted = false;
+    let retries = 0;
 
-    ws.onopen = () => setWsStatus('open');
-    ws.onclose = () => setWsStatus('closed');
-    ws.onerror = () => setWsStatus('closed');
-
-    ws.onmessage = (event) => {
+    const handleMessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'NewReadings' || msg.event === 'NewReadings') {
@@ -297,17 +293,52 @@ export default function LiveView({ expName, onBack }) {
       }
     };
 
+    const connect = () => {
+      if (unmounted) return;
+      const wsUrl = `ws://${window.location.hostname}:8080/api/ws/`;
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        retries = 0;
+        setWsStatus('open');
+      };
+
+      ws.onclose = () => {
+        if (unmounted) return;
+        retries++;
+        setWsStatus('connecting');
+        // Exponential backoff: 2s, 4s, 8s … capped at 30s
+        const delay = Math.min(2000 * Math.pow(2, retries - 1), 30000);
+        retryTimerId = setTimeout(connect, delay);
+      };
+
+      ws.onerror = () => {
+        // onclose fires after onerror; reconnect logic is there
+      };
+
+      ws.onmessage = handleMessage;
+    };
+
+    connect();
+
     return () => {
-      ws.close();
+      unmounted = true;
+      clearTimeout(retryTimerId);
+      if (ws) ws.close();
     };
   }, [expName]);
 
-  // Poll growth rates every 3s
+  // Poll growth rates every 3s; stop if CSV doesn't exist yet (404)
   useEffect(() => {
     const poll = () => {
       getGrowthRates(expName)
         .then((data) => setGrowthRates(data))
-        .catch(() => {});
+        .catch((err) => {
+          if (err?.message && err.message.includes('→ 404')) {
+            clearInterval(growthPollRef.current);
+          }
+        });
     };
     poll();
     growthPollRef.current = setInterval(poll, 3000);

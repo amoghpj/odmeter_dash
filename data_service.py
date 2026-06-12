@@ -409,6 +409,21 @@ async def get_data(name: str, max_points: int = MAX_POINTS):
     })
 
 
+# ── /svc/csv/{name} ──────────────────────────────────────────────────────────
+
+@app.get("/svc/csv/{name}")
+async def download_csv(name: str):
+    csv_path = _find_csv(name)
+    if csv_path is None:
+        return JSONResponse({"error": f"File not found: {name}.csv"}, status_code=404)
+    return FileResponse(
+        str(csv_path),
+        filename=f"{name}.csv",
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}.csv"'},
+    )
+
+
 # ── /svc/config/{name} ───────────────────────────────────────────────────────
 
 @app.get("/svc/config/{name}")

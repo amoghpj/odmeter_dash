@@ -101,7 +101,12 @@ export default function App() {
         )}
 
         {page === 'live' && liveExp && (
-          <LiveView expName={liveExp} onBack={handleBack} theme={theme} />
+          <LiveView
+            expName={liveExp}
+            onBack={handleBack}
+            theme={theme}
+            isLive={liveExp === runningExp?.name}
+          />
         )}
 
         {page === 'live' && !liveExp && (

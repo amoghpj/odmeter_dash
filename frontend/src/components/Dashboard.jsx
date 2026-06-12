@@ -101,6 +101,14 @@ function PastExperiments({ localExps, goExps, onViewLive }) {
             <span className={`tag ${isRunning ? 'running' : 'stopped'}`}>
               {isRunning ? 'running' : 'stopped'}
             </span>
+            <a
+              className="exp-action"
+              href={`/svc/csv/${encodeURIComponent(name)}`}
+              download={`${name}.csv`}
+              title="Download CSV"
+            >
+              ↓ CSV
+            </a>
             <button className="exp-action" onClick={() => onViewLive(name)}>
               View plots →
             </button>

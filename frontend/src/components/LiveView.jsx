@@ -175,7 +175,7 @@ function DeviceChart({ device, traces, sampleNames, yScale, theme }) {
         data={plotTraces}
         layout={layout}
         config={makePlotConfig()}
-        style={{ width: '100%' }}
+        style={{ width: '100%', height: '280px' }}
         useResizeHandler
       />
       <PillLegend
@@ -237,7 +237,7 @@ function GrowthRateChart({ device, traces, sampleNames, theme }) {
         data={plotTraces}
         layout={layout}
         config={makePlotConfig()}
-        style={{ width: '100%' }}
+        style={{ width: '100%', height: '240px' }}
         useResizeHandler
       />
       <PillLegend
@@ -256,7 +256,7 @@ function GrowthRateChart({ device, traces, sampleNames, theme }) {
  *
  * Props: expName (string), onBack (function)
  */
-export default function LiveView({ expName, onBack, theme = 'dark' }) {
+export default function LiveView({ expName, onBack, theme = 'dark', isLive = true }) {
   const [histData, setHistData] = useState([]);
   const [liveRows, setLiveRows] = useState([]);
   const [config, setConfig] = useState(null);
@@ -306,8 +306,10 @@ export default function LiveView({ expName, onBack, theme = 'dark' }) {
     });
   }, [expName]);
 
-  // WebSocket connection with auto-reconnect
+  // WebSocket connection with auto-reconnect — only for the live experiment
   useEffect(() => {
+    if (!isLive) return;
+
     let ws = null;
     let retryTimerId = null;
     let unmounted = false;
@@ -381,10 +383,18 @@ export default function LiveView({ expName, onBack, theme = 'dark' }) {
       clearTimeout(retryTimerId);
       if (ws) ws.close();
     };
-  }, [expName]);
+  }, [expName, isLive]);
 
-  // Poll growth rates every 3s; stop if CSV doesn't exist yet (404)
+  // Poll growth rates every 3s (live only); stop if CSV doesn't exist yet (404)
   useEffect(() => {
+    if (!isLive) {
+      // For historical experiments, load growth rates once and stop.
+      getGrowthRates(expName)
+        .then((data) => setGrowthRates(data))
+        .catch(() => {});
+      return;
+    }
+
     const poll = () => {
       getGrowthRates(expName)
         .then((data) => setGrowthRates(data))
@@ -397,7 +407,7 @@ export default function LiveView({ expName, onBack, theme = 'dark' }) {
     poll();
     growthPollRef.current = setInterval(poll, 3000);
     return () => clearInterval(growthPollRef.current);
-  }, [expName]);
+  }, [expName, isLive]);
 
   // Merged rows
   const allRows = mergeRows(histData, liveRows);
@@ -437,15 +447,17 @@ export default function LiveView({ expName, onBack, theme = 'dark' }) {
           ← Dashboard
         </button>
         <span className="page-title">{expName}</span>
-        <span
-          style={{
-            fontSize: 11,
-            color: wsStatus === 'open' ? '#3d3' : wsStatus === 'connecting' ? '#fa3' : '#c03',
-            marginLeft: 'auto',
-          }}
-        >
-          WS: {wsStatus}
-        </span>
+        {isLive && (
+          <span
+            style={{
+              fontSize: 11,
+              color: wsStatus === 'open' ? '#3d3' : wsStatus === 'connecting' ? '#fa3' : '#c03',
+              marginLeft: 'auto',
+            }}
+          >
+            WS: {wsStatus}
+          </span>
+        )}
       </div>
 
       <div className="controls-row">
@@ -465,34 +477,37 @@ export default function LiveView({ expName, onBack, theme = 'dark' }) {
           </button>
         </div>
 
-        <button
-          className={`toggle-btn ${paused ? 'active' : ''}`}
-          style={{ border: '1px solid var(--border)', borderRadius: 6 }}
-          onClick={() => {
-            if (paused) {
-              // Resume: flush buffer
-              pausedRef.current = false;
-              setPaused(false);
-              setLiveRows((prev) => mergeRows(prev, pauseBufferRef.current));
-              pauseBufferRef.current = [];
-            } else {
-              pausedRef.current = true;
-              setPaused(true);
-            }
-          }}
-        >
-          {paused ? '▶ Resume' : '⏸ Pause'}
-        </button>
+        {isLive && (
+          <>
+            <button
+              className={`toggle-btn ${paused ? 'active' : ''}`}
+              style={{ border: '1px solid var(--border)', borderRadius: 6 }}
+              onClick={() => {
+                if (paused) {
+                  pausedRef.current = false;
+                  setPaused(false);
+                  setLiveRows((prev) => mergeRows(prev, pauseBufferRef.current));
+                  pauseBufferRef.current = [];
+                } else {
+                  pausedRef.current = true;
+                  setPaused(true);
+                }
+              }}
+            >
+              {paused ? '▶ Resume' : '⏸ Pause'}
+            </button>
 
-        {liveRows.length > 0 && (
-          <span className="exp-meta">
-            +{liveRows.length} live pts
-            {paused && pauseBufferRef.current.length > 0 && (
-              <span style={{ color: 'var(--amber)', marginLeft: 6 }}>
-                ({pauseBufferRef.current.length} buffered)
+            {liveRows.length > 0 && (
+              <span className="exp-meta">
+                +{liveRows.length} live pts
+                {paused && pauseBufferRef.current.length > 0 && (
+                  <span style={{ color: 'var(--amber)', marginLeft: 6 }}>
+                    ({pauseBufferRef.current.length} buffered)
+                  </span>
+                )}
               </span>
             )}
-          </span>
+          </>
         )}
       </div>
 

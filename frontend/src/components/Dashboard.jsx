@@ -244,7 +244,7 @@ export default function Dashboard({ onViewLive, runningExp }) {
         device: r.device,
         channel: r.channel,
         name: r.sampleName,
-        standard_curve_name: r.meta?.std_curve || '',
+        standard_curve_name: r.meta?.std_curve || 'Ecoli-ReusableGlassTube',
         metadata: Object.fromEntries(
           Object.entries(r.meta || {}).filter(([k]) => k !== 'std_curve')
         ),

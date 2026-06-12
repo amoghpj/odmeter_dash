@@ -53,6 +53,8 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
     const defaultChannel = devices[0]?.channels?.[0]?.channel ?? 1;
     const meta = {};
     allMetaCols.forEach((c) => (meta[c] = ''));
+    // Pre-select first available standard curve so submissions always carry one
+    if (stdCurves.length > 0) meta['std_curve'] = stdCurves[0];
     onChange([
       ...rows,
       {

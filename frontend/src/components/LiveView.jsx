@@ -36,9 +36,7 @@ function buildTraces(rows, device) {
     const key = row.channel;
     if (!byChannel[key]) byChannel[key] = { x: [], y: [], channel: key };
     byChannel[key].x.push(row.t_min ?? null);
-    // Fall back to raw_od when converted_od is absent (no calibration curve)
-    const y = row.converted_od ?? row.raw_od ?? null;
-    byChannel[key].y.push(y);
+    byChannel[key].y.push(row.converted_od ?? null);
   });
   return Object.values(byChannel).sort((a, b) => a.channel - b.channel);
 }
@@ -133,7 +131,7 @@ function DeviceChart({ device, traces, sampleNames, yScale }) {
     xaxis: { ...AXIS_STYLE, title: 'Time (min)' },
     yaxis: {
       ...AXIS_STYLE,
-      title: 'OD (converted or raw)',
+      title: 'OD',
       type: yScale === 'log' ? 'log' : 'linear',
     },
     height: 280,

@@ -4,43 +4,41 @@ import LiveView from './components/LiveView.jsx';
 import Diagnostics from './components/Diagnostics.jsx';
 import { getExperiments } from './api/go.js';
 
-/**
- * App — top-level shell with sidebar navigation.
- *
- * Navigation state:
- *   page: 'dashboard' | 'live' | 'diagnostics'
- *   liveExp: string | null  (experiment name when on live page)
- */
+function getInitialTheme() {
+  const stored = localStorage.getItem('odm-theme');
+  if (stored === 'light' || stored === 'dark') return stored;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
 export default function App() {
   const [page, setPage] = useState('dashboard');
   const [liveExp, setLiveExp] = useState(null);
   const [runningExp, setRunningExp] = useState(null);
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  // Apply theme to <html> so CSS :root[data-theme] selector works
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('odm-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () =>
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
   // Poll acquisition endpoint every 5s for running experiment
   useEffect(() => {
     const poll = () => {
       getExperiments()
         .then((exps) => {
-          if (!Array.isArray(exps)) {
-            setRunningExp(null);
-            return;
-          }
-          const running = exps.find((e) => e.is_running) ?? null;
-          setRunningExp(running);
+          const list = Array.isArray(exps) ? exps : [];
+          setRunningExp(list.find((e) => e.is_running) ?? null);
         })
-        .catch(() => {
-          // Server may not be up yet; ignore
-        });
+        .catch(() => {});
     };
     poll();
     const id = setInterval(poll, 5000);
     return () => clearInterval(id);
   }, []);
-
-  const navigate = (newPage, expName) => {
-    setPage(newPage);
-    if (newPage === 'live' && expName) setLiveExp(expName);
-  };
 
   const handleViewLive = (expName) => {
     setLiveExp(expName);
@@ -49,7 +47,6 @@ export default function App() {
 
   const handleBack = () => {
     setPage('dashboard');
-    setLiveExp(null);
   };
 
   return (
@@ -57,20 +54,19 @@ export default function App() {
       {/* Sidebar */}
       <nav className="sidebar">
         <div className="sidebar-logo">ODMeter</div>
+
         <button
           className={`nav-btn ${page === 'dashboard' ? 'active' : ''}`}
-          onClick={() => navigate('dashboard')}
+          onClick={() => setPage('dashboard')}
         >
           Dashboard
         </button>
+
         <button
           className={`nav-btn ${page === 'live' ? 'active' : ''}`}
           onClick={() => {
-            if (liveExp) {
-              navigate('live', liveExp);
-            } else if (runningExp) {
-              navigate('live', runningExp.name);
-            }
+            const target = liveExp || runningExp?.name;
+            if (target) handleViewLive(target);
           }}
           disabled={!liveExp && !runningExp}
           title={
@@ -83,11 +79,18 @@ export default function App() {
         >
           Live
         </button>
+
         <button
           className={`nav-btn ${page === 'diagnostics' ? 'active' : ''}`}
-          onClick={() => navigate('diagnostics')}
+          onClick={() => setPage('diagnostics')}
         >
           Diagnostics
+        </button>
+
+        <div className="sidebar-spacer" />
+
+        <button className="theme-toggle" onClick={toggleTheme}>
+          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
         </button>
       </nav>
 
@@ -96,14 +99,17 @@ export default function App() {
         {page === 'dashboard' && (
           <Dashboard onViewLive={handleViewLive} runningExp={runningExp} />
         )}
+
         {page === 'live' && liveExp && (
           <LiveView expName={liveExp} onBack={handleBack} />
         )}
+
         {page === 'live' && !liveExp && (
           <div className="card">
             <p className="empty-state">No experiment selected. Go to Dashboard first.</p>
           </div>
         )}
+
         {page === 'diagnostics' && <Diagnostics />}
       </main>
     </div>

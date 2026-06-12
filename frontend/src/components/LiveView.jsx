@@ -364,7 +364,7 @@ export default function LiveView({ expName, onBack }) {
       </div>
 
       <div className="controls-row">
-        <span style={{ fontSize: 12, color: '#555' }}>Y scale:</span>
+        <span className="section-header" style={{ marginBottom: 0 }}>Y scale:</span>
         <div className="toggle-group">
           <button
             className={`toggle-btn ${yScale === 'linear' ? 'active' : ''}`}
@@ -380,9 +380,7 @@ export default function LiveView({ expName, onBack }) {
           </button>
         </div>
         {liveRows.length > 0 && (
-          <span style={{ fontSize: 11, color: '#555' }}>
-            +{liveRows.length} live points
-          </span>
+          <span className="exp-meta">+{liveRows.length} live points</span>
         )}
       </div>
 

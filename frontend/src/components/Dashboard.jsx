@@ -40,7 +40,7 @@ function StatusBanner({ runningExp, onViewLive, onStop }) {
     return (
       <div className="status-banner stopped">
         <span className="status-dot grey" />
-        <span style={{ color: '#555', fontSize: 13 }}>No experiment running</span>
+        <span className="status-idle-text">No experiment running</span>
       </div>
     );
   }

@@ -8,8 +8,8 @@ const HEALTH_CHECKS = [
 ];
 
 function StatusBadge({ status }) {
-  if (!status) return <span style={{ color: '#444' }}>—</span>;
-  if (status === 'running') return <span style={{ color: '#fa3' }}>running…</span>;
+  if (!status) return <span className="empty-state">—</span>;
+  if (status === 'running') return <span className="warn">running…</span>;
   if (status === 'pass') return <span className="pass">PASS</span>;
   if (status === 'fail') return <span className="fail">FAIL</span>;
   if (status === 'warn') return <span className="warn">WARN</span>;
@@ -182,20 +182,11 @@ function HealthChecks() {
                 <td>
                   <StatusBadge status={r.status} />
                 </td>
-                <td style={{ color: '#555', fontSize: 11 }}>
-                  {r.httpStatus ?? '—'}
-                </td>
-                <td style={{ color: '#555' }}>{r.time != null ? r.time : '—'}</td>
+                <td className="mono">{r.httpStatus ?? '—'}</td>
+                <td className="mono">{r.time != null ? r.time : '—'}</td>
                 <td
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: 10,
-                    color: '#555',
-                    maxWidth: 300,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
+                  className="mono"
+                  style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}
                   title={r.detail}
                 >
                   {r.detail}
@@ -216,7 +207,7 @@ function WriteTests() {
   return (
     <div className="card">
       <p className="section-header">Write Tests</p>
-      <p style={{ color: '#555', fontSize: 12, lineHeight: 1.6 }}>
+      <p className="loading-text" style={{ lineHeight: 1.6 }}>
         Write tests require creating and deleting sample records. Run from terminal:
       </p>
       <div className="yaml-preview" style={{ marginTop: 10 }}>
@@ -233,7 +224,7 @@ function IntervalAccuracy() {
   return (
     <div className="card">
       <p className="section-header">Interval Accuracy</p>
-      <p style={{ color: '#555', fontSize: 12, lineHeight: 1.6 }}>
+      <p className="loading-text" style={{ lineHeight: 1.6 }}>
         Interval accuracy tests require a long-running acquisition. Run from terminal:
       </p>
       <div className="yaml-preview" style={{ marginTop: 10 }}>
@@ -252,7 +243,7 @@ export default function Diagnostics() {
       <div className="page-header">
         <span className="page-title">Diagnostics</span>
       </div>
-      <p style={{ fontSize: 12, color: '#555' }}>
+      <p className="loading-text">
         Server: {window.location.hostname}:{window.location.port || 80}
         &nbsp;|&nbsp; Go API: {window.location.hostname}:8080
         &nbsp;|&nbsp; Data service: {window.location.hostname}:8051

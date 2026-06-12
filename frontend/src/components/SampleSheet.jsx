@@ -135,7 +135,8 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
               <tr>
                 <td
                   colSpan={4 + visibleMetaCols.length + 1}
-                  style={{ padding: '12px 10px', color: '#444', fontSize: 12 }}
+                  style={{ padding: '12px 10px', fontSize: 12 }}
+                  className="empty-state"
                 >
                   No samples — click "+ Add row" to begin
                 </td>

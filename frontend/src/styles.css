@@ -1,5 +1,110 @@
 /* ============================================================
-   ODMeter — Dark Theme
+   ODMeter — Design tokens (dark default, light override)
+   ============================================================ */
+
+:root {
+  /* Backgrounds */
+  --bg:           #111111;
+  --bg-surface:   #1a1a1a;
+  --bg-surface-2: #161616;
+  --bg-surface-3: #141414;
+  --bg-hover:     #202020;
+  --bg-input:     #0e0e0e;
+  --bg-focus:     #0d1a2a;
+
+  /* Borders */
+  --border:       #2a2a2a;
+  --border-dim:   #1d1d1d;
+  --border-focus: #4477bb;
+
+  /* Text */
+  --text:         #dddddd;
+  --text-muted:   #aaaaaa;
+  --text-dim:     #777777;
+  --text-faint:   #555555;
+  --text-ghost:   #3a3a3a;
+  --text-input:   #cccccc;
+
+  /* Status — same in both themes */
+  --green:        #33dd33;
+  --green-bg:     #1c3a1c;
+  --green-border: #2d4a2d;
+  --green-text:   #55dd55;
+  --red-bg:       #7a2020;
+  --amber:        #e67e22;
+  --pass-color:   #2a9d2a;
+  --fail-color:   #c0392b;
+
+  /* Tags */
+  --tag-running-bg:   #1c3a1c;
+  --tag-running-text: #55dd55;
+  --tag-stopped-bg:   #252525;
+  --tag-stopped-text: #666666;
+
+  /* Sidebar */
+  --sidebar-bg:     #1a1a1a;
+  --sidebar-border: #2a2a2a;
+
+  /* YAML */
+  --yaml-bg:    #0a0a0a;
+  --yaml-text:  #77aa88;
+
+  /* Chip active */
+  --chip-active-bg:     #1a2a3a;
+  --chip-active-border: #334466;
+  --chip-active-text:   #88aaff;
+
+  /* Focus ring shadow */
+  --focus-shadow: inset 0 0 0 2px #334466;
+
+  /* Live-view link color */
+  --link:       #6688cc;
+  --link-hover: #88aaff;
+}
+
+:root[data-theme="light"] {
+  --bg:           #f4f4f5;
+  --bg-surface:   #ffffff;
+  --bg-surface-2: #f0f0f1;
+  --bg-surface-3: #e8e8ea;
+  --bg-hover:     #f8f8f8;
+  --bg-input:     #ffffff;
+  --bg-focus:     #e8f0ff;
+
+  --border:       #d8d8dc;
+  --border-dim:   #e8e8ec;
+  --border-focus: #4477cc;
+
+  --text:         #1a1a1a;
+  --text-muted:   #444444;
+  --text-dim:     #666666;
+  --text-faint:   #888888;
+  --text-ghost:   #bbbbbb;
+  --text-input:   #1a1a1a;
+
+  --tag-running-bg:   #d4f0d4;
+  --tag-running-text: #1a6b1a;
+  --tag-stopped-bg:   #e8e8e8;
+  --tag-stopped-text: #888888;
+
+  --sidebar-bg:     #1a1a1a;
+  --sidebar-border: #2a2a2a;
+
+  --yaml-bg:    #f0f7f0;
+  --yaml-text:  #2a6040;
+
+  --chip-active-bg:     #ddeeff;
+  --chip-active-border: #4477cc;
+  --chip-active-text:   #224488;
+
+  --focus-shadow: inset 0 0 0 2px #4477cc;
+
+  --link:       #2255cc;
+  --link-hover: #113399;
+}
+
+/* ============================================================
+   Reset & base
    ============================================================ */
 
 *, *::before, *::after {
@@ -8,21 +113,28 @@
   padding: 0;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
-  background: #111;
-  color: #ddd;
+  background: var(--bg);
+  color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ---- App shell ---- */
 #root {
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
+
+/* ============================================================
+   App shell
+   ============================================================ */
 
 .app-shell {
   display: flex;
@@ -30,15 +142,18 @@ body {
   height: 100%;
 }
 
-/* ---- Sidebar ---- */
+/* ============================================================
+   Sidebar
+   ============================================================ */
+
 .sidebar {
   width: 160px;
   flex-shrink: 0;
-  background: #1a1a1a;
-  border-right: 1px solid #2a2a2a;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
-  padding: 20px 10px;
+  padding: 20px 10px 12px;
   gap: 4px;
 }
 
@@ -47,9 +162,13 @@ body {
   font-weight: 700;
   color: #888;
   letter-spacing: 1px;
-  padding: 0 4px 16px 4px;
+  padding: 0 4px 16px;
   border-bottom: 1px solid #2a2a2a;
   margin-bottom: 8px;
+}
+
+.sidebar-spacer {
+  flex: 1;
 }
 
 .nav-btn {
@@ -66,7 +185,7 @@ body {
 }
 
 .nav-btn:hover {
-  background: #222;
+  background: #252525;
   color: #ccc;
 }
 
@@ -75,7 +194,35 @@ body {
   color: #fff;
 }
 
-/* ---- Main content ---- */
+.nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Theme toggle lives at the bottom of the sidebar */
+.theme-toggle {
+  margin-top: 4px;
+  background: none;
+  border: 1px solid #333;
+  color: #777;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.theme-toggle:hover {
+  background: #252525;
+  color: #aaa;
+}
+
+/* ============================================================
+   Main content
+   ============================================================ */
+
 .main-content {
   flex: 1;
   overflow-y: auto;
@@ -83,9 +230,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
 }
 
-/* ---- Buttons ---- */
+/* ============================================================
+   Buttons
+   ============================================================ */
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -98,6 +249,7 @@ body {
   cursor: pointer;
   transition: opacity 0.15s, filter 0.15s;
   white-space: nowrap;
+  color: var(--text);
 }
 
 .btn:disabled {
@@ -109,52 +261,38 @@ body {
   filter: brightness(1.15);
 }
 
-.btn-stop {
-  background: #7a2020;
-  color: #fff;
-}
-
-.btn-close {
-  background: #333;
-  color: #bbb;
-}
-
-.btn-start {
-  background: #1a5c1a;
-  color: #fff;
-}
-
-.btn-create {
-  background: #1a3a5c;
-  color: #fff;
-}
+.btn-stop   { background: #7a2020; color: #fff; }
+.btn-close  { background: #333;    color: #bbb; }
+.btn-start  { background: #1a5c1a; color: #fff; }
+.btn-create { background: #1a3a5c; color: #fff; }
+.btn-live   { background: #1a2a3a; color: #88aaee; border: 1px solid #334; }
 
 .btn-back {
-  background: #222;
-  border: 1px solid #333 !important;
-  color: #888;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   border-radius: 6px;
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .btn-back:hover {
-  background: #2a2a2a;
-  color: #aaa;
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 11px;
-}
+.btn-sm { padding: 4px 10px; font-size: 11px; }
 
-/* ---- Status banner ---- */
+/* ============================================================
+   Status banner
+   ============================================================ */
+
 .status-banner {
-  background: #1c2a1c;
-  border: 1px solid #2d4a2d;
+  background: var(--green-bg);
+  border: 1px solid var(--green-border);
   border-radius: 10px;
   padding: 16px 20px;
   display: flex;
@@ -164,8 +302,8 @@ body {
 }
 
 .status-banner.stopped {
-  background: #1e1e1e;
-  border-color: #333;
+  background: var(--bg-surface);
+  border-color: var(--border);
 }
 
 .status-dot {
@@ -176,12 +314,12 @@ body {
 }
 
 .status-dot.green {
-  background: #3d3;
-  box-shadow: 0 0 6px #3d3;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }
 
 .status-dot.grey {
-  background: #555;
+  background: var(--text-faint);
 }
 
 .status-info {
@@ -194,12 +332,17 @@ body {
 .status-name {
   font-size: 13px;
   font-weight: 600;
-  color: #ddd;
+  color: var(--text);
 }
 
 .status-sub {
   font-size: 11px;
-  color: #777;
+  color: var(--text-dim);
+}
+
+.status-idle-text {
+  font-size: 13px;
+  color: var(--text-faint);
 }
 
 .status-actions {
@@ -208,7 +351,10 @@ body {
   align-items: center;
 }
 
-/* ---- Two-column layout ---- */
+/* ============================================================
+   Two-column layout
+   ============================================================ */
+
 .two-col {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -216,52 +362,75 @@ body {
   align-items: start;
 }
 
-/* ---- Cards ---- */
+@media (max-width: 900px) {
+  .two-col { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   Cards
+   ============================================================ */
+
 .card {
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 20px;
 }
 
-/* ---- Section headers ---- */
+/* ============================================================
+   Section headers
+   ============================================================ */
+
 .section-header {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #666;
+  color: var(--text-faint);
   margin-bottom: 8px;
 }
 
-/* ---- Form inputs ---- */
+/* ============================================================
+   Form inputs
+   ============================================================ */
+
 input[type="text"],
 input[type="number"],
 input[type="email"],
 input[type="password"],
 select,
 textarea {
-  background: #111;
-  border: 1px solid #333;
-  color: #ccc;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-input);
   border-radius: 5px;
   padding: 7px 10px;
   font-size: 13px;
   font-family: inherit;
-  width: 100%;
 }
 
 input[type="text"]:focus,
 input[type="number"]:focus,
 select:focus,
 textarea:focus {
-  outline: 1px solid #447;
-  border-color: #447;
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px var(--border-focus);
+}
+
+/* Suppress browser autofill background override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-input);
+  -webkit-box-shadow: 0 0 0 100px var(--bg-input) inset;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 .form-row {
   display: flex;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .form-field {
@@ -272,12 +441,31 @@ textarea:focus {
 
 .form-field label {
   font-size: 11px;
-  color: #666;
+  color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-/* ---- Spreadsheet table ---- */
+.form-field input,
+.form-field select {
+  width: 180px;
+}
+
+.form-field.narrow input,
+.form-field.narrow select {
+  width: 80px;
+}
+
+/* ============================================================
+   Spreadsheet table
+   ============================================================ */
+
+.sheet-wrap {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
 table.sheet {
   width: 100%;
   border-collapse: collapse;
@@ -285,69 +473,84 @@ table.sheet {
 }
 
 table.sheet thead {
-  background: #161616;
+  background: var(--bg-surface-2);
 }
 
 table.sheet th {
   text-transform: uppercase;
   font-size: 10px;
-  color: #555;
+  color: var(--text-faint);
   padding: 7px 10px;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-dim);
   text-align: left;
   white-space: nowrap;
+  user-select: none;
+}
+
+table.sheet th:last-child {
+  border-right: none;
+  width: 32px;
 }
 
 table.sheet td {
   padding: 0;
-  border-bottom: 1px solid #1d1d1d;
+  border-bottom: 1px solid var(--border-dim);
+  border-right: 1px solid var(--border-dim);
 }
 
+table.sheet td:last-child {
+  border-right: none;
+  text-align: center;
+  vertical-align: middle;
+}
+
+table.sheet tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Cell inputs — reset global input styles inside sheet */
 table.sheet td .cell {
   display: block;
   width: 100%;
   padding: 7px 10px;
   background: transparent;
   border: none;
-  color: #ccc;
+  border-radius: 0;
+  color: var(--text);
   outline: none;
   font-size: 12px;
   font-family: inherit;
+  box-shadow: none;
 }
 
 table.sheet td .cell:focus {
-  background: #0d1a2a;
-  color: #fff;
-  box-shadow: inset 0 0 0 2px #335;
-}
-
-table.sheet td input[type="text"].cell,
-table.sheet td input[type="number"].cell {
-  border-radius: 0;
-  border: none;
+  background: var(--bg-focus);
+  color: var(--text);
+  box-shadow: var(--focus-shadow);
 }
 
 select.cell {
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E");
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23777'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
   padding-right: 24px;
-  cursor: pointer;
 }
 
 table.sheet .rn {
-  color: #3a3a3a;
+  color: var(--text-ghost);
   font-size: 10px;
-  background: #141414;
+  background: var(--bg-surface-3);
   width: 28px;
   text-align: center;
   user-select: none;
 }
 
 table.sheet tbody tr:hover td {
-  background: #1e1e1e;
+  background: var(--bg-hover);
 }
 
 table.sheet tbody tr:hover td .cell {
@@ -355,13 +558,13 @@ table.sheet tbody tr:hover td .cell {
 }
 
 table.sheet tbody tr:hover td .cell:focus {
-  background: #0d1a2a;
+  background: var(--bg-focus);
 }
 
 .btn-del-row {
   background: none;
   border: none;
-  color: #444;
+  color: var(--text-ghost);
   cursor: pointer;
   font-size: 14px;
   padding: 4px 8px;
@@ -370,40 +573,47 @@ table.sheet tbody tr:hover td .cell:focus {
 }
 
 .btn-del-row:hover {
-  color: #a33;
-  background: #2a1515;
+  color: #cc4444;
+  background: rgba(180, 40, 40, 0.12);
 }
 
 .btn-add-row {
-  margin-top: 8px;
-  background: none;
-  border: 1px dashed #2a2a2a;
-  color: #555;
-  padding: 5px 14px;
-  border-radius: 5px;
+  display: block;
+  width: 100%;
+  margin-top: 0;
+  background: var(--bg-surface-2);
+  border: none;
+  border-top: 1px dashed var(--border);
+  color: var(--text-faint);
+  padding: 7px 14px;
   cursor: pointer;
   font-size: 12px;
-  transition: border-color 0.15s, color 0.15s;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  border-radius: 0 0 5px 5px;
 }
 
 .btn-add-row:hover {
-  border-color: #444;
-  color: #888;
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
-/* ---- Accordion ---- */
+/* ============================================================
+   Accordion
+   ============================================================ */
+
 .accordion {
-  border: 1px solid #222;
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
   margin-top: 12px;
 }
 
 .accordion-header {
-  background: #161616;
+  background: var(--bg-surface-2);
   padding: 10px 14px;
   cursor: pointer;
-  color: #666;
+  color: var(--text-faint);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -413,12 +623,14 @@ table.sheet tbody tr:hover td .cell:focus {
 }
 
 .accordion-header:hover {
-  background: #1c1c1c;
+  background: var(--bg-hover);
+  color: var(--text-dim);
 }
 
 .accordion-arrow {
   font-size: 10px;
   transition: transform 0.2s;
+  display: inline-block;
 }
 
 .accordion-arrow.open {
@@ -428,14 +640,32 @@ table.sheet tbody tr:hover td .cell:focus {
 .accordion-body {
   display: none;
   padding: 14px;
-  background: #141414;
+  background: var(--bg-surface-3);
 }
 
 .accordion-body.open {
   display: block;
 }
 
-/* ---- Chips ---- */
+.accordion-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.accordion-hint code {
+  color: var(--yaml-text);
+  background: var(--yaml-bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Menlo', 'Monaco', monospace;
+}
+
+/* ============================================================
+   Chips
+   ============================================================ */
+
 .chips-row {
   display: flex;
   flex-wrap: wrap;
@@ -444,24 +674,25 @@ table.sheet tbody tr:hover td .cell:focus {
 }
 
 .chip {
-  background: #1e1e1e;
-  border: 1px solid #2a2a2a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 4px 10px;
-  color: #aaa;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 11px;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .chip:hover {
-  background: #252525;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .chip.active {
-  background: #1a2a3a;
-  border-color: #335;
-  color: #8af;
+  background: var(--chip-active-bg);
+  border-color: var(--chip-active-border);
+  color: var(--chip-active-text);
 }
 
 .add-col-row {
@@ -475,23 +706,46 @@ table.sheet tbody tr:hover td .cell:focus {
   flex-shrink: 0;
 }
 
-/* ---- YAML preview ---- */
+.btn-add-col {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 5px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-add-col:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ============================================================
+   YAML preview
+   ============================================================ */
+
 .yaml-preview {
-  background: #0e0e0e;
-  border: 1px solid #222;
+  background: var(--yaml-bg);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 12px;
   font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
   font-size: 11px;
-  color: #7a9;
+  color: var(--yaml-text);
   white-space: pre;
   overflow-x: auto;
   margin-top: 12px;
   max-height: 200px;
   overflow-y: auto;
+  line-height: 1.7;
 }
 
-/* ---- Past experiments list ---- */
+/* ============================================================
+   Past experiments list
+   ============================================================ */
+
 .exp-list {
   list-style: none;
 }
@@ -501,7 +755,7 @@ table.sheet tbody tr:hover td .cell:focus {
   align-items: center;
   gap: 8px;
   padding: 9px 0;
-  border-bottom: 1px solid #1d1d1d;
+  border-bottom: 1px solid var(--border-dim);
 }
 
 .exp-list li:last-child {
@@ -511,7 +765,7 @@ table.sheet tbody tr:hover td .cell:focus {
 .exp-name {
   flex: 1;
   font-size: 12px;
-  color: #ccc;
+  color: var(--text);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -520,25 +774,26 @@ table.sheet tbody tr:hover td .cell:focus {
 
 .exp-meta {
   font-size: 10px;
-  color: #555;
+  color: var(--text-faint);
   white-space: nowrap;
 }
 
 .exp-action {
-  color: #558;
-  border: 1px solid #334;
+  color: var(--link);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 8px;
   cursor: pointer;
   font-size: 11px;
   background: none;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .exp-action:hover {
-  background: #1a2a3a;
-  color: #8af;
+  background: var(--chip-active-bg);
+  color: var(--link-hover);
+  border-color: var(--chip-active-border);
 }
 
 .tag {
@@ -549,16 +804,19 @@ table.sheet tbody tr:hover td .cell:focus {
 }
 
 .tag.running {
-  background: #1c3a1c;
-  color: #5d5;
+  background: var(--tag-running-bg);
+  color: var(--tag-running-text);
 }
 
 .tag.stopped {
-  background: #222;
-  color: #666;
+  background: var(--tag-stopped-bg);
+  color: var(--tag-stopped-text);
 }
 
-/* ---- Page header ---- */
+/* ============================================================
+   Page header
+   ============================================================ */
+
 .page-header {
   display: flex;
   align-items: center;
@@ -568,10 +826,13 @@ table.sheet tbody tr:hover td .cell:focus {
 .page-title {
   font-size: 15px;
   font-weight: 600;
-  color: #bbb;
+  color: var(--text-muted);
 }
 
-/* ---- Diagnostics ---- */
+/* ============================================================
+   Diagnostics
+   ============================================================ */
+
 .diag-table {
   border-collapse: collapse;
   width: 100%;
@@ -580,31 +841,32 @@ table.sheet tbody tr:hover td .cell:focus {
 .diag-table th {
   font-size: 10px;
   text-transform: uppercase;
-  color: #555;
+  color: var(--text-faint);
   padding: 6px 8px;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--border);
   text-align: left;
 }
 
 .diag-table td {
   padding: 5px 8px;
   font-size: 12px;
-  border-bottom: 1px solid #1d1d1d;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-dim);
 }
 
-.pass {
-  color: #2a9d2a;
+.diag-table td.mono {
+  font-family: 'Menlo', 'Monaco', monospace;
+  color: var(--text-muted);
 }
 
-.fail {
-  color: #c0392b;
-}
+.pass  { color: var(--pass-color); font-weight: 600; }
+.fail  { color: var(--fail-color); font-weight: 600; }
+.warn  { color: var(--amber);      font-weight: 600; }
 
-.warn {
-  color: #e67e22;
-}
+/* ============================================================
+   Live view
+   ============================================================ */
 
-/* ---- LiveView ---- */
 .controls-row {
   display: flex;
   align-items: center;
@@ -614,7 +876,7 @@ table.sheet tbody tr:hover td .cell:focus {
 
 .toggle-group {
   display: flex;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -622,7 +884,7 @@ table.sheet tbody tr:hover td .cell:focus {
 .toggle-btn {
   background: none;
   border: none;
-  color: #777;
+  color: var(--text-dim);
   padding: 5px 14px;
   font-size: 12px;
   cursor: pointer;
@@ -630,13 +892,13 @@ table.sheet tbody tr:hover td .cell:focus {
 }
 
 .toggle-btn.active {
-  background: #2a2a2a;
-  color: #ddd;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .toggle-btn:hover:not(.active) {
-  background: #1e1e1e;
-  color: #aaa;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
 }
 
 .device-section {
@@ -649,7 +911,7 @@ table.sheet tbody tr:hover td .cell:focus {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #555;
+  color: var(--text-faint);
 }
 
 .pill-legend {
@@ -667,6 +929,7 @@ table.sheet tbody tr:hover td .cell:focus {
   border: 1px solid transparent;
   transition: opacity 0.15s, border-color 0.15s;
   background: none;
+  color: #fff;
 }
 
 .pill.hidden {
@@ -675,8 +938,8 @@ table.sheet tbody tr:hover td .cell:focus {
 
 .pill-reset {
   background: none;
-  border: 1px solid #333;
-  color: #555;
+  border: 1px solid var(--border);
+  color: var(--text-faint);
   border-radius: 20px;
   padding: 3px 10px;
   font-size: 11px;
@@ -685,51 +948,56 @@ table.sheet tbody tr:hover td .cell:focus {
 }
 
 .pill-reset:hover {
-  color: #999;
-  border-color: #555;
+  color: var(--text-muted);
+  border-color: var(--text-faint);
 }
 
-/* ---- Loading / error states ---- */
+/* ============================================================
+   Utility / states
+   ============================================================ */
+
 .loading-text {
-  color: #555;
+  color: var(--text-faint);
   font-size: 12px;
   padding: 12px 0;
 }
 
 .error-text {
-  color: #c0392b;
+  color: var(--fail-color);
   font-size: 12px;
   padding: 8px 0;
 }
 
 .form-hint {
   font-size: 11px;
-  color: #555;
+  color: var(--text-faint);
   margin-left: 8px;
 }
 
 .form-status {
   font-size: 12px;
   padding: 6px 0;
+  color: var(--text);
 }
 
-.form-status.error {
-  color: #c0392b;
-}
+.form-status.error   { color: var(--fail-color); }
+.form-status.success { color: var(--pass-color); }
 
-.form-status.success {
-  color: #2a9d2a;
-}
-
-/* ---- Misc ---- */
 .empty-state {
-  color: #444;
+  color: var(--text-ghost);
   font-size: 12px;
   padding: 12px 0;
 }
 
 hr.divider {
   border: none;
-  border-top: 1px solid #222;
+  border-top: 1px solid var(--border);
   margin: 12px 0;
+}
+
+.define-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
 }

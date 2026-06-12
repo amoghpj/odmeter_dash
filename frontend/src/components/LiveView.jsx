@@ -36,7 +36,9 @@ function buildTraces(rows, device) {
     const key = row.channel;
     if (!byChannel[key]) byChannel[key] = { x: [], y: [], channel: key };
     byChannel[key].x.push(row.t_min ?? null);
-    byChannel[key].y.push(row.converted_od ?? null);
+    // Fall back to raw_od when converted_od is absent (no calibration curve)
+    const y = row.converted_od ?? row.raw_od ?? null;
+    byChannel[key].y.push(y);
   });
   return Object.values(byChannel).sort((a, b) => a.channel - b.channel);
 }
@@ -131,7 +133,7 @@ function DeviceChart({ device, traces, sampleNames, yScale }) {
     xaxis: { ...AXIS_STYLE, title: 'Time (min)' },
     yaxis: {
       ...AXIS_STYLE,
-      title: 'OD',
+      title: 'OD (converted or raw)',
       type: yScale === 'log' ? 'log' : 'linear',
     },
     height: 280,
@@ -282,7 +284,10 @@ export default function LiveView({ expName, onBack }) {
 
     const handleMessage = (event) => {
       try {
-        const msg = JSON.parse(event.data);
+        // Go emits bare NaN tokens (invalid JSON) when no calibration curve is set.
+        // Replace them with null before parsing so the message isn't silently dropped.
+        const sanitized = event.data.replace(/\bNaN\b/g, 'null');
+        const msg = JSON.parse(sanitized);
         if (msg.eventType === 'NewReadings') {
           const readings = msg.readings ?? [];
           if (!Array.isArray(readings)) return;

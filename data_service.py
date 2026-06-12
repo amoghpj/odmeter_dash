@@ -8,6 +8,7 @@ data_service.py — FastAPI service on port 8051
 
 import asyncio
 import json
+import math
 import os
 import sys
 import traceback
@@ -72,7 +73,7 @@ def _find_csv(name: str) -> Path | None:
             return p
     return None
 
-PLOT_COLS = ["t_min", "converted_od", "device", "channel", "sample_name"]
+PLOT_COLS = ["t_min", "raw_od", "converted_od", "device", "channel", "sample_name"]
 MAX_POINTS = 500
 
 # ── CSV cache: {filepath: (mtime, df)} ───────────────────────────────────────
@@ -155,7 +156,7 @@ def _read_and_process_csv(filepath: str) -> tuple[pd.DataFrame | None, str | Non
         df = pd.read_csv(
             filepath,
             comment="#",
-            usecols=["timestamp", "device", "channel", "converted_od"],
+            usecols=["timestamp", "device", "channel", "raw_od", "converted_od"],
         )
         df["device"] = df["device"].apply(str)
         df["channel"] = df["channel"].apply(int)
@@ -205,6 +206,17 @@ def get_full_csv_data(filepath: str) -> tuple[pd.DataFrame | None, str | None]:
     result = _read_and_process_csv(filepath)
     _csv_cache[filepath] = (mtime, result)
     return result
+
+
+def _nan_to_none(v):
+    """Convert float NaN/Inf to None so JSON serialization produces null, not NaN."""
+    if isinstance(v, float) and not math.isfinite(v):
+        return None
+    return v
+
+
+def _sanitize_rows(records: list[dict]) -> list[dict]:
+    return [{k: _nan_to_none(v) for k, v in row.items()} for row in records]
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
@@ -390,7 +402,7 @@ async def get_data(name: str, max_points: int = MAX_POINTS):
             meta_out["sample_info"] = meta_raw["sample_info"]
 
     return JSONResponse({
-        "rows": sampled.to_dict(orient="records"),
+        "rows": _sanitize_rows(sampled.to_dict(orient="records")),
         "total_rows": total_rows,
         "downsampled": downsampled,
         "meta": meta_out,

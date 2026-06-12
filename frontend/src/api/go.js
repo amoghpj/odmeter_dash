@@ -22,7 +22,8 @@ async function request(method, path, body) {
   }
   const text = await res.text();
   if (!text) return null;
-  return JSON.parse(text);
+  // Go serializes NaN as a bare NaN token (invalid JSON); replace with null.
+  return JSON.parse(text.replace(/\bNaN\b/g, 'null'));
 }
 
 /** GET /api/config/ */

@@ -8,21 +8,54 @@ const PLOTLY_COLORS = [
   '#FF97FF', '#FECB52',
 ];
 
-const DARK_LAYOUT = {
-  paper_bgcolor: '#1a1a1a',
-  plot_bgcolor: '#111',
-  font: { color: '#ddd', size: 11 },
-  margin: { t: 30, r: 20, b: 50, l: 55 },
-  legend: { bgcolor: '#1a1a1a', bordercolor: '#2a2a2a', borderwidth: 1 },
-  autosize: true,
+const THEME_LAYOUT = {
+  dark: {
+    base: {
+      paper_bgcolor: '#1a1a1a',
+      plot_bgcolor: '#111111',
+      font: { color: '#dddddd', size: 11 },
+      margin: { t: 30, r: 20, b: 50, l: 55 },
+      legend: { bgcolor: '#1a1a1a', bordercolor: '#2a2a2a', borderwidth: 1 },
+      autosize: true,
+    },
+    axis: {
+      gridcolor: '#2a2a2a',
+      linecolor: '#2a2a2a',
+      tickcolor: '#444444',
+      zerolinecolor: '#2a2a2a',
+    },
+  },
+  light: {
+    base: {
+      paper_bgcolor: '#ffffff',
+      plot_bgcolor: '#f8f8f8',
+      font: { color: '#222222', size: 11 },
+      margin: { t: 30, r: 20, b: 50, l: 55 },
+      legend: { bgcolor: '#ffffff', bordercolor: '#dddddd', borderwidth: 1 },
+      autosize: true,
+    },
+    axis: {
+      gridcolor: '#e0e0e0',
+      linecolor: '#cccccc',
+      tickcolor: '#999999',
+      zerolinecolor: '#cccccc',
+    },
+  },
 };
 
-const AXIS_STYLE = {
-  gridcolor: '#2a2a2a',
-  linecolor: '#2a2a2a',
-  tickcolor: '#444',
-  zerolinecolor: '#2a2a2a',
-};
+// Keep only the most useful mode-bar buttons; always show on hover (default).
+const MODEBAR_REMOVE = [
+  'select2d', 'lasso2d', 'toggleSpikelines',
+  'hoverClosestCartesian', 'hoverCompareCartesian', 'toImage',
+];
+
+function makePlotConfig() {
+  return {
+    responsive: true,
+    displaylogo: false,
+    modeBarButtonsToRemove: MODEBAR_REMOVE,
+  };
+}
 
 /**
  * Build Plotly traces for a single device.
@@ -92,19 +125,16 @@ function PillLegend({ traces, sampleNames, visibility, onToggle, onReset }) {
 /**
  * DeviceChart — Plotly chart + pill legend for one device.
  */
-function DeviceChart({ device, traces, sampleNames, yScale }) {
+function DeviceChart({ device, traces, sampleNames, yScale, theme }) {
   const [visibility, setVisibility] = useState({});
+  const t = THEME_LAYOUT[theme] ?? THEME_LAYOUT.dark;
 
   const handleToggle = (i) => {
     setVisibility((prev) => {
-      // If any are explicitly hidden, just toggle this one
       const anyHidden = Object.values(prev).some((v) => v === false);
       if (!anyHidden) {
-        // Isolate: hide all except i
         const next = {};
-        traces.forEach((_, idx) => {
-          if (idx !== i) next[idx] = false;
-        });
+        traces.forEach((_, idx) => { if (idx !== i) next[idx] = false; });
         return next;
       }
       const next = { ...prev };
@@ -127,12 +157,13 @@ function DeviceChart({ device, traces, sampleNames, yScale }) {
   }));
 
   const layout = {
-    ...DARK_LAYOUT,
-    xaxis: { ...AXIS_STYLE, title: 'Time (min)' },
+    ...t.base,
+    xaxis: { ...t.axis, title: 'Time (min)' },
     yaxis: {
-      ...AXIS_STYLE,
+      ...t.axis,
       title: 'OD',
       type: yScale === 'log' ? 'log' : 'linear',
+      rangemode: yScale === 'log' ? 'normal' : 'tozero',
     },
     height: 280,
   };
@@ -143,7 +174,7 @@ function DeviceChart({ device, traces, sampleNames, yScale }) {
       <Plot
         data={plotTraces}
         layout={layout}
-        config={{ displayModeBar: false, responsive: true }}
+        config={makePlotConfig()}
         style={{ width: '100%' }}
         useResizeHandler
       />
@@ -161,17 +192,16 @@ function DeviceChart({ device, traces, sampleNames, yScale }) {
 /**
  * GrowthRateChart — same structure but for growth rate data.
  */
-function GrowthRateChart({ device, traces, sampleNames }) {
+function GrowthRateChart({ device, traces, sampleNames, theme }) {
   const [visibility, setVisibility] = useState({});
+  const t = THEME_LAYOUT[theme] ?? THEME_LAYOUT.dark;
 
   const handleToggle = (i) => {
     setVisibility((prev) => {
       const anyHidden = Object.values(prev).some((v) => v === false);
       if (!anyHidden) {
         const next = {};
-        traces.forEach((_, idx) => {
-          if (idx !== i) next[idx] = false;
-        });
+        traces.forEach((_, idx) => { if (idx !== i) next[idx] = false; });
         return next;
       }
       const next = { ...prev };
@@ -194,9 +224,9 @@ function GrowthRateChart({ device, traces, sampleNames }) {
   }));
 
   const layout = {
-    ...DARK_LAYOUT,
-    xaxis: { ...AXIS_STYLE, title: 'Time (min)' },
-    yaxis: { ...AXIS_STYLE, title: 'Growth rate (h⁻¹)' },
+    ...t.base,
+    xaxis: { ...t.axis, title: 'Time (min)' },
+    yaxis: { ...t.axis, title: 'Growth rate (h⁻¹)' },
     height: 240,
   };
 
@@ -206,7 +236,7 @@ function GrowthRateChart({ device, traces, sampleNames }) {
       <Plot
         data={plotTraces}
         layout={layout}
-        config={{ displayModeBar: false, responsive: true }}
+        config={makePlotConfig()}
         style={{ width: '100%' }}
         useResizeHandler
       />
@@ -226,19 +256,22 @@ function GrowthRateChart({ device, traces, sampleNames }) {
  *
  * Props: expName (string), onBack (function)
  */
-export default function LiveView({ expName, onBack }) {
+export default function LiveView({ expName, onBack, theme = 'dark' }) {
   const [histData, setHistData] = useState([]);
   const [liveRows, setLiveRows] = useState([]);
   const [config, setConfig] = useState(null);
   const [growthRates, setGrowthRates] = useState(null);
   const [yScale, setYScale] = useState('linear');
-  const [wsStatus, setWsStatus] = useState('connecting'); // 'connecting' | 'open' | 'closed'
+  const [wsStatus, setWsStatus] = useState('connecting');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [paused, setPaused] = useState(false);
 
   const wsRef = useRef(null);
   const growthPollRef = useRef(null);
-  const timeStartedRef = useRef(null); // ISO string; used to convert live t → t_min
+  const timeStartedRef = useRef(null);
+  const pausedRef = useRef(false);       // mirrors `paused` for use inside WS closure
+  const pauseBufferRef = useRef([]);     // accumulates live rows while paused
 
   // Build sample name map: {device: {channel: sampleName}}
   const sampleNames = {};
@@ -296,15 +329,17 @@ export default function LiveView({ expName, onBack }) {
           const t0 = timeStartedRef.current
             ? new Date(timeStartedRef.current).getTime()
             : null;
-          setLiveRows((prev) => {
-            const newRows = readings
-              .filter((r) => r !== null && r !== undefined)
-              .map((r) => ({
-                ...r,
-                t_min: t0 ? (new Date(r.t).getTime() - t0) / 60000 : null,
-              }));
-            return mergeRows(prev, newRows);
-          });
+          const newRows = readings
+            .filter((r) => r !== null && r !== undefined)
+            .map((r) => ({
+              ...r,
+              t_min: t0 ? (new Date(r.t).getTime() - t0) / 60000 : null,
+            }));
+          if (pausedRef.current) {
+            pauseBufferRef.current.push(...newRows);
+          } else {
+            setLiveRows((prev) => mergeRows(prev, newRows));
+          }
         }
       } catch (e) {
         // ignore parse errors
@@ -429,8 +464,35 @@ export default function LiveView({ expName, onBack }) {
             Log
           </button>
         </div>
+
+        <button
+          className={`toggle-btn ${paused ? 'active' : ''}`}
+          style={{ border: '1px solid var(--border)', borderRadius: 6 }}
+          onClick={() => {
+            if (paused) {
+              // Resume: flush buffer
+              pausedRef.current = false;
+              setPaused(false);
+              setLiveRows((prev) => mergeRows(prev, pauseBufferRef.current));
+              pauseBufferRef.current = [];
+            } else {
+              pausedRef.current = true;
+              setPaused(true);
+            }
+          }}
+        >
+          {paused ? '▶ Resume' : '⏸ Pause'}
+        </button>
+
         {liveRows.length > 0 && (
-          <span className="exp-meta">+{liveRows.length} live points</span>
+          <span className="exp-meta">
+            +{liveRows.length} live pts
+            {paused && pauseBufferRef.current.length > 0 && (
+              <span style={{ color: 'var(--amber)', marginLeft: 6 }}>
+                ({pauseBufferRef.current.length} buffered)
+              </span>
+            )}
+          </span>
         )}
       </div>
 
@@ -453,6 +515,7 @@ export default function LiveView({ expName, onBack }) {
                 traces={traces}
                 sampleNames={sampleNames[device]}
                 yScale={yScale}
+                theme={theme}
               />
             </div>
           );
@@ -471,6 +534,7 @@ export default function LiveView({ expName, onBack }) {
                   device={device}
                   traces={traces}
                   sampleNames={sampleNames[device]}
+                  theme={theme}
                 />
               </div>
             );

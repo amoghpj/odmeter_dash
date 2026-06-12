@@ -4,13 +4,15 @@ import {
   getConfig,
   getDevices,
   getExperiments,
+  getSamples,
   createSamples,
+  deleteSamples,
   createExperiment,
   startExperiment,
   stopExperiment,
   closeExperiment,
 } from '../api/go.js';
-import { listExperiments, saveConfig } from '../api/data.js';
+import { listExperiments, saveConfig, getConfig as getSvcConfig } from '../api/data.js';
 
 function formatDuration(startIso) {
   if (!startIso) return null;
@@ -156,6 +158,40 @@ export default function Dashboard({ onViewLive, runningExp }) {
     return () => clearInterval(id);
   }, []);
 
+  // When a running experiment is detected, populate the form with its settings.
+  // This handles navigating back to Dashboard while an experiment is active.
+  useEffect(() => {
+    if (!runningExp) return;
+
+    setExpName(runningExp.name || '');
+    if (runningExp.user) setUser(runningExp.user);
+    if (runningExp.interval) setInterval_(runningExp.interval);
+
+    getSvcConfig(runningExp.name)
+      .then((cfg) => {
+        if (!cfg?.samples?.length) return;
+        const DEFAULT_META_KEYS = ['strain', 'condition', 'replicate', 'group', 'std_curve'];
+        const rows = cfg.samples.map((s) => {
+          const meta = {};
+          DEFAULT_META_KEYS.forEach((k) => { meta[k] = s[k] !== undefined ? String(s[k]) : ''; });
+          Object.keys(s).forEach((k) => {
+            if (!['device', 'channel', 'name', ...DEFAULT_META_KEYS].includes(k)) {
+              meta[k] = s[k] !== undefined ? String(s[k]) : '';
+            }
+          });
+          return {
+            id: `row-${Date.now()}-${Math.random()}`,
+            device: String(s.device || ''),
+            channel: Number(s.channel) || 1,
+            sampleName: s.name || '',
+            meta,
+          };
+        });
+        setSampleRows(rows);
+      })
+      .catch(() => {});
+  }, [runningExp?.name]);
+
   const handleStop = useCallback(async () => {
     if (!runningExp) return;
     await stopExperiment(runningExp.name);
@@ -183,7 +219,18 @@ export default function Dashboard({ onViewLive, runningExp }) {
         await closeExperiment(runningExp.name);
       }
 
-      // 2. Create samples
+      // 2. Delete any samples still registered in Go so channels are free.
+      //    Go does not release channel assignments on close; lingering samples
+      //    cause "channel is being used" 400 errors on the next createSamples.
+      const existingSamples = await getSamples().catch(() => null);
+      const samplesToDelete = Array.isArray(existingSamples) ? existingSamples : [];
+      if (samplesToDelete.length > 0) {
+        await deleteSamples(
+          samplesToDelete.map((s) => ({ device: s.device, channel: s.channel }))
+        );
+      }
+
+      // 3. Create samples
       const samplePayload = sampleRows.map((r) => ({
         device: r.device,
         channel: r.channel,
@@ -199,7 +246,7 @@ export default function Dashboard({ onViewLive, runningExp }) {
         .map((s) => s.uuid)
         .filter(Boolean);
 
-      // 3. Create experiment
+      // 4. Create experiment
       await createExperiment({
         name: expName.trim(),
         user,
@@ -207,10 +254,10 @@ export default function Dashboard({ onViewLive, runningExp }) {
         samples: uuids.map((u) => ({ uuid: u })),
       });
 
-      // 4. Start experiment
+      // 5. Start experiment
       await startExperiment(expName.trim());
 
-      // 5. Save config to data service
+      // 6. Save config to data service
       await saveConfig(expName.trim(), {
         experiment: expName.trim(),
         interval: Number(interval),

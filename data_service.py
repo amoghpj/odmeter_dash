@@ -179,7 +179,7 @@ def _read_and_process_csv(filepath: str) -> tuple[pd.DataFrame | None, str | Non
         if ts_raw:
             time_started = pd.to_datetime(ts_raw, utc=True)
             df["t_min"] = (
-                pd.to_datetime(df["timestamp"], utc=True) - time_started
+                pd.to_datetime(df["timestamp"], format="ISO8601", utc=True) - time_started
             ).dt.total_seconds() / 60
         else:
             df["t_min"] = float("nan")
@@ -294,6 +294,43 @@ async def ws_proxy(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+
+
+# ── /svc/status ───────────────────────────────────────────────────────────────
+
+@app.get("/svc/status")
+async def svc_status():
+    go_reachable = False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{GO_API}/api/config/")
+            go_reachable = r.status_code == 200
+    except Exception:
+        pass
+
+    dirs_info = []
+    exp_count = 0
+    seen: set[str] = set()
+    for d in DATA_DIRS:
+        exists = d.is_dir()
+        count = 0
+        if exists:
+            for p in d.glob("*.csv"):
+                if not p.stem.startswith(".") and not p.stem.endswith("_growth_rates"):
+                    if p.stem not in seen:
+                        seen.add(p.stem)
+                        count += 1
+        exp_count += count
+        dirs_info.append({"path": str(d), "exists": exists, "experiments": count})
+
+    return JSONResponse({
+        "go_api": GO_API,
+        "go_reachable": go_reachable,
+        "data_dirs": dirs_info,
+        "experiments_total": exp_count,
+        "pandas_version": pd.__version__,
+        "python_version": sys.version.split()[0],
+    })
 
 
 # ── /svc/experiments ──────────────────────────────────────────────────────────

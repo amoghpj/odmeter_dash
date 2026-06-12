@@ -375,6 +375,8 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 20px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ============================================================
@@ -905,6 +907,8 @@ table.sheet tbody tr:hover td .cell:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .device-label {

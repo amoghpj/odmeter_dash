@@ -14,6 +14,7 @@ const DARK_LAYOUT = {
   font: { color: '#ddd', size: 11 },
   margin: { t: 30, r: 20, b: 50, l: 55 },
   legend: { bgcolor: '#1a1a1a', bordercolor: '#2a2a2a', borderwidth: 1 },
+  autosize: true,
 };
 
 const AXIS_STYLE = {

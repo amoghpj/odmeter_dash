@@ -6,6 +6,7 @@ data_service.py — FastAPI service on port 8051
   • Serves built React SPA from frontend/dist/ if present
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -17,8 +18,9 @@ import httpx
 import numpy as np
 import pandas as pd
 import uvicorn
+import websockets
 import yaml
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -70,7 +72,7 @@ def _find_csv(name: str) -> Path | None:
             return p
     return None
 
-PLOT_COLS = ["t_min", "converted_od", "device", "sample_name"]
+PLOT_COLS = ["t_min", "converted_od", "device", "channel", "sample_name"]
 MAX_POINTS = 500
 
 # ── CSV cache: {filepath: (mtime, df)} ───────────────────────────────────────
@@ -117,9 +119,9 @@ def lttb(t_arr, y_arr, n_out):
 
 
 def subsample_df(df, max_points=MAX_POINTS):
-    """Apply LTTB per (device, sample_name) series."""
+    """Apply LTTB per (device, channel) series."""
     parts = []
-    for _, group in df.groupby(["device", "sample_name"], sort=False):
+    for _, group in df.groupby(["device", "channel"], sort=False):
         group = group.sort_values("t_min").reset_index(drop=True)
         if len(group) > max_points:
             idx = lttb(
@@ -173,10 +175,14 @@ def _read_and_process_csv(filepath: str) -> tuple[pd.DataFrame | None, str | Non
                         "sample_name",
                     ] = f"{name}_{dev}"
 
-        time_started = pd.to_datetime(meta["time_started"], utc=True)
-        df["t_min"] = (
-            pd.to_datetime(df["timestamp"], format="ISO8601", utc=True) - time_started
-        ).dt.total_seconds() / 60
+        ts_raw = meta.get("time_started")
+        if ts_raw:
+            time_started = pd.to_datetime(ts_raw, utc=True)
+            df["t_min"] = (
+                pd.to_datetime(df["timestamp"], utc=True) - time_started
+            ).dt.total_seconds() / 60
+        else:
+            df["t_min"] = float("nan")
 
         return df[PLOT_COLS].copy(), None
     except Exception:
@@ -246,6 +252,48 @@ async def proxy_api(path: str, request: Request):
             {"error": "Go server unavailable"},
             status_code=503,
         )
+
+
+# ── /svc/ws/ → Go WebSocket proxy ────────────────────────────────────────────
+
+_GO_WS = GO_API.replace("http://", "ws://").replace("https://", "wss://") + "/api/ws/"
+
+
+@app.websocket("/svc/ws/")
+async def ws_proxy(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        async with websockets.connect(_GO_WS) as backend:
+            async def fwd_to_client():
+                try:
+                    async for msg in backend:
+                        if isinstance(msg, bytes):
+                            await websocket.send_bytes(msg)
+                        else:
+                            await websocket.send_text(msg)
+                except Exception:
+                    pass
+
+            async def fwd_to_backend():
+                try:
+                    while True:
+                        data = await websocket.receive_text()
+                        await backend.send(data)
+                except (WebSocketDisconnect, Exception):
+                    pass
+
+            done, pending = await asyncio.wait(
+                [asyncio.create_task(fwd_to_client()), asyncio.create_task(fwd_to_backend())],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+    except Exception as e:
+        print(f"[ws_proxy] {e}", file=sys.stderr)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 # ── /svc/experiments ──────────────────────────────────────────────────────────

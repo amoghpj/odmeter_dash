@@ -309,7 +309,8 @@ export default function LiveView({ expName, onBack }) {
 
     const connect = () => {
       if (unmounted) return;
-      const wsUrl = `ws://${window.location.hostname}:8080/api/ws/`;
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/svc/ws/`;
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

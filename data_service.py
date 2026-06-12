@@ -306,6 +306,8 @@ async def list_experiments():
         if not data_dir.is_dir():
             continue
         for csv_path in sorted(data_dir.glob("*.csv")):
+            if csv_path.stem.startswith('.') or csv_path.stem.endswith('_growth_rates'):
+                continue
             if csv_path.stem in seen:
                 continue
             seen.add(csv_path.stem)

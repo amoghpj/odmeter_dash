@@ -15,8 +15,7 @@ import pandas as pd
 from scipy.optimize import minimize
 from tqdm import tqdm
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data")
-HASH_FILE = os.path.join(DATA_DIR, ".odmeterhash")
+_LOCAL_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data")
 
 WINDOW_HALF_MIN = 10.0   # ±5 min → 10-min window
 MIN_POINTS = 10          # expect ~30 pts/full window at 20 s interval; reject < 1/3
@@ -26,9 +25,19 @@ _status_lock = threading.Lock()
 _registry_lock = threading.Lock()
 
 
+def _source_dir(filepath):
+    """Directory that holds the source CSV (used for co-located cache files)."""
+    d = os.path.dirname(os.path.abspath(filepath))
+    return d if os.path.isdir(d) else _LOCAL_DATA_DIR
+
+
 def get_growth_rates_path(filepath):
     stem = os.path.splitext(os.path.basename(filepath))[0]
-    return os.path.join(DATA_DIR, f".{stem}_growth_rates.csv")
+    return os.path.join(_source_dir(filepath), f".{stem}_growth_rates.csv")
+
+
+def _hash_file(filepath):
+    return os.path.join(_source_dir(filepath), ".odmeterhash")
 
 
 def get_file_hash(filepath):
@@ -39,36 +48,38 @@ def get_file_hash(filepath):
     return h.hexdigest()
 
 
-def _load_hash_registry():
+def _load_hash_registry(filepath):
+    hash_file = _hash_file(filepath)
     with _registry_lock:
-        if not os.path.exists(HASH_FILE):
+        if not os.path.exists(hash_file):
             return {}
         try:
-            with open(HASH_FILE) as f:
+            with open(hash_file) as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             return {}
 
 
-def _update_hash_registry(basename, hash_val):
+def _update_hash_registry(filepath, basename, hash_val):
+    hash_file = _hash_file(filepath)
     with _registry_lock:
         try:
-            with open(HASH_FILE) as f:
+            with open(hash_file) as f:
                 registry = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             registry = {}
         registry[basename] = hash_val
-        tmp = HASH_FILE + ".tmp"
+        tmp = hash_file + ".tmp"
         with open(tmp, "w") as f:
             json.dump(registry, f, indent=2)
-        os.replace(tmp, HASH_FILE)
+        os.replace(tmp, hash_file)
 
 
 def needs_recomputation(filepath):
     """True if the growth rates cache is absent or the source file has changed."""
     if not os.path.exists(get_growth_rates_path(filepath)):
         return True
-    registry = _load_hash_registry()
+    registry = _load_hash_registry(filepath)
     key = os.path.basename(filepath)
     if key not in registry:
         return True
@@ -165,7 +176,7 @@ def _worker(filepath, df):
         pd.DataFrame(rows).to_csv(out_path, index=False)
         print(f"[growth_rates {_ts()}] Wrote {len(rows)} rows → {out_path}", flush=True)
 
-        _update_hash_registry(os.path.basename(filepath), current_hash)
+        _update_hash_registry(filepath, os.path.basename(filepath), current_hash)
 
         with _status_lock:
             _status[filepath] = "done"

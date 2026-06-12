@@ -209,6 +209,15 @@ export default function Dashboard({ onViewLive, runningExp }) {
       setFormStatus('error:Add at least one sample row');
       return;
     }
+    const seen = new Set();
+    for (const r of sampleRows) {
+      const key = `${r.device}:${r.channel}`;
+      if (seen.has(key)) {
+        setFormStatus(`error:Duplicate channel — ${r.device} ch ${r.channel} appears more than once`);
+        return;
+      }
+      seen.add(key);
+    }
 
     setFormStatus('submitting');
     try {

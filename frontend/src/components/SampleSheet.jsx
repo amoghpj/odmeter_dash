@@ -94,7 +94,9 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
     if (!dev || !dev.channels || dev.channels.length === 0) {
       return Array.from({ length: 8 }, (_, i) => i + 1);
     }
-    return dev.channels.filter((c) => c.enabled !== false).map((c) => c.channel);
+    // Go sets enabled:true when a sample is assigned, enabled:false when free.
+    // Show all channels; the submit flow handles any conflicts.
+    return dev.channels.map((c) => c.channel);
   };
 
   // Build YAML preview

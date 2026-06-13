@@ -17,8 +17,8 @@ from tqdm import tqdm
 
 _LOCAL_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data")
 
-WINDOW_HALF_MIN = 10.0   # ±5 min → 10-min window
-MIN_POINTS = 10          # expect ~30 pts/full window at 20 s interval; reject < 1/3
+WINDOW_HALF_MIN = 30.0   # ±30 min → 60-min window
+MIN_POINTS = 10          # minimum points required to attempt a fit
 
 _status: dict[str, str] = {}
 _status_lock = threading.Lock()

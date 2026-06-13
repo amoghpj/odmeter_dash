@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Plot from 'react-plotly.js';
-import { getExperimentData, getConfig, getGrowthRates } from '../api/data.js';
+import { getExperimentData, getConfig, getGrowthRates, computeGrowthRates } from '../api/data.js';
 
 const PLOTLY_COLORS = [
   '#636EFA', '#EF553B', '#00CC96', '#AB63FA',
@@ -98,7 +98,7 @@ function PillLegend({ traces, sampleNames, visibility, onToggle, onReset }) {
     <div className="pill-legend">
       {traces.map((tr, i) => {
         const color = PLOTLY_COLORS[i % PLOTLY_COLORS.length];
-        const label = sampleNames?.[tr.channel] || `Ch ${tr.channel}`;
+        const label = sampleNames?.[tr.channel] || tr.sample_name || `Ch ${tr.channel ?? i}`;
         const hidden = visibility?.[i] === false;
         return (
           <button
@@ -192,7 +192,7 @@ function DeviceChart({ device, traces, sampleNames, yScale, theme }) {
 /**
  * GrowthRateChart — same structure but for growth rate data.
  */
-function GrowthRateChart({ device, traces, sampleNames, theme }) {
+function GrowthRateChart({ device, traces, theme }) {
   const [visibility, setVisibility] = useState({});
   const t = THEME_LAYOUT[theme] ?? THEME_LAYOUT.dark;
 
@@ -217,7 +217,7 @@ function GrowthRateChart({ device, traces, sampleNames, theme }) {
     y: tr.y,
     type: 'scatter',
     mode: 'lines+markers',
-    name: sampleNames?.[tr.channel] || `Ch ${tr.channel}`,
+    name: tr.sample_name || `Series ${i}`,
     line: { color: PLOTLY_COLORS[i % PLOTLY_COLORS.length], width: 1.5 },
     marker: { size: 3, color: PLOTLY_COLORS[i % PLOTLY_COLORS.length] },
     visible: visibility[i] === false ? false : true,
@@ -242,7 +242,6 @@ function GrowthRateChart({ device, traces, sampleNames, theme }) {
       />
       <PillLegend
         traces={traces}
-        sampleNames={sampleNames}
         visibility={visibility}
         onToggle={handleToggle}
         onReset={handleReset}
@@ -260,7 +259,8 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
   const [histData, setHistData] = useState([]);
   const [liveRows, setLiveRows] = useState([]);
   const [config, setConfig] = useState(null);
-  const [growthRates, setGrowthRates] = useState(null);
+  const [grRows, setGrRows] = useState([]);
+  const [grStatus, setGrStatus] = useState('idle'); // 'idle' | 'computing' | 'done' | 'error'
   const [yScale, setYScale] = useState('linear');
   const [wsStatus, setWsStatus] = useState('connecting');
   const [loading, setLoading] = useState(true);
@@ -268,7 +268,7 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
   const [paused, setPaused] = useState(false);
 
   const wsRef = useRef(null);
-  const growthPollRef = useRef(null);
+  const grPollRef = useRef(null);
   const timeStartedRef = useRef(null);
   const pausedRef = useRef(false);       // mirrors `paused` for use inside WS closure
   const pauseBufferRef = useRef([]);     // accumulates live rows while paused
@@ -385,29 +385,37 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
     };
   }, [expName, isLive]);
 
-  // Poll growth rates every 3s (live only); stop if CSV doesn't exist yet (404)
+  // Load any cached growth rates on mount
   useEffect(() => {
-    if (!isLive) {
-      // For historical experiments, load growth rates once and stop.
-      getGrowthRates(expName)
-        .then((data) => setGrowthRates(data))
-        .catch(() => {});
-      return;
-    }
+    getGrowthRates(expName)
+      .then((data) => {
+        if (data?.rows) setGrRows(data.rows);
+        if (data?.status === 'computing') setGrStatus('computing');
+        else if (data?.rows?.length) setGrStatus('done');
+      })
+      .catch(() => {});
+  }, [expName]);
 
+  // Poll status while a computation is in progress
+  useEffect(() => {
+    if (grStatus !== 'computing') return;
     const poll = () => {
       getGrowthRates(expName)
-        .then((data) => setGrowthRates(data))
-        .catch((err) => {
-          if (err?.message && err.message.includes('→ 404')) {
-            clearInterval(growthPollRef.current);
+        .then((data) => {
+          if (data?.status === 'done') {
+            setGrRows(data.rows || []);
+            setGrStatus('done');
+            clearInterval(grPollRef.current);
+          } else if (data?.status === 'error') {
+            setGrStatus('error');
+            clearInterval(grPollRef.current);
           }
-        });
+        })
+        .catch(() => {});
     };
-    poll();
-    growthPollRef.current = setInterval(poll, 3000);
-    return () => clearInterval(growthPollRef.current);
-  }, [expName, isLive]);
+    grPollRef.current = setInterval(poll, 3000);
+    return () => clearInterval(grPollRef.current);
+  }, [grStatus, expName]);
 
   // Merged rows
   const allRows = mergeRows(histData, liveRows);
@@ -416,28 +424,20 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
   const deviceSet = new Set(allRows.map((r) => r.device).filter(Boolean));
   const devices = [...deviceSet].sort();
 
-  // Growth rate devices
-  const grDeviceSet = new Set();
-  if (growthRates && typeof growthRates === 'object') {
-    Object.keys(growthRates).forEach((d) => grDeviceSet.add(d));
-  }
+  // Growth rate devices derived from flat rows
+  const grDeviceSet = new Set(grRows.map((r) => r.device).filter(Boolean));
   const grDevices = [...grDeviceSet].sort();
 
-  // Build growth rate trace data
   const buildGrTraces = (device) => {
-    const deviceData = growthRates?.[device];
-    if (!deviceData) return [];
-    const byChannel = {};
-    Object.entries(deviceData).forEach(([channel, points]) => {
-      if (!Array.isArray(points)) return;
-      const ch = Number(channel);
-      byChannel[ch] = {
-        channel: ch,
-        x: points.map((p) => p.t ?? p.time),
-        y: points.map((p) => p.mu ?? p.rate ?? p.value),
-      };
+    const bySample = {};
+    grRows.forEach((row) => {
+      if (row.device !== device) return;
+      const key = row.sample_name || 'unknown';
+      if (!bySample[key]) bySample[key] = { x: [], y: [], sample_name: key };
+      bySample[key].x.push(row.t_min ?? null);
+      bySample[key].y.push(row.growth_rate ?? null);
     });
-    return Object.values(byChannel).sort((a, b) => a.channel - b.channel);
+    return Object.values(bySample).sort((a, b) => a.sample_name.localeCompare(b.sample_name));
   };
 
   return (
@@ -536,25 +536,43 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
           );
         })}
 
-      {grDevices.length > 0 && (
-        <>
-          <p className="section-header" style={{ marginTop: 8 }}>
-            Growth Rates
-          </p>
-          {grDevices.map((device) => {
-            const traces = buildGrTraces(device);
-            return (
-              <div key={`gr-${device}`} className="card">
-                <GrowthRateChart
-                  device={device}
-                  traces={traces}
-                  sampleNames={sampleNames[device]}
-                  theme={theme}
-                />
-              </div>
-            );
-          })}
-        </>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <p className="section-header" style={{ marginBottom: 0 }}>Growth Rates</p>
+        {grStatus === 'computing' ? (
+          <span style={{ fontSize: 11, color: 'var(--amber)' }}>Computing…</span>
+        ) : (
+          <button
+            className="btn-back"
+            style={{ fontSize: 11, padding: '3px 10px' }}
+            onClick={() => {
+              setGrStatus('computing');
+              computeGrowthRates(expName).catch(() => setGrStatus('error'));
+            }}
+          >
+            {grRows.length > 0 ? 'Recompute' : 'Compute'}
+          </button>
+        )}
+        {grStatus === 'error' && (
+          <span style={{ fontSize: 11, color: 'var(--fail-color)' }}>
+            Error — check server logs
+          </span>
+        )}
+      </div>
+
+      {grDevices.length > 0 && grDevices.map((device) => (
+        <div key={`gr-${device}`} className="card">
+          <GrowthRateChart
+            device={device}
+            traces={buildGrTraces(device)}
+            theme={theme}
+          />
+        </div>
+      ))}
+
+      {grRows.length === 0 && grStatus !== 'computing' && (
+        <p className="empty-state" style={{ paddingTop: 0 }}>
+          No growth rates computed yet.
+        </p>
       )}
     </>
   );

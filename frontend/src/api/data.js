@@ -58,7 +58,16 @@ export function saveConfig(name, config) {
 
 /**
  * GET /svc/growth-rates/{name}
+ * Returns cached data and status; never triggers computation.
  */
 export function getGrowthRates(name) {
   return request('GET', `/svc/growth-rates/${encodeURIComponent(name)}`);
+}
+
+/**
+ * POST /svc/growth-rates/{name}/compute
+ * Manually trigger growth-rate computation.
+ */
+export function computeGrowthRates(name) {
+  return request('POST', `/svc/growth-rates/${encodeURIComponent(name)}/compute`);
 }

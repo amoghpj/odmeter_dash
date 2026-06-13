@@ -464,28 +464,36 @@ async def save_config(name: str, request: Request):
 
 @app.get("/svc/growth-rates/{name}")
 async def get_growth_rates(name: str):
+    """Return cached growth rates and current computation status. Never auto-triggers."""
     csv_path = _find_csv(name)
     if csv_path is None:
         return JSONResponse({"error": f"File not found: {name}.csv"}, status_code=404)
     filepath = str(csv_path)
 
     status = growth_rates.get_status(filepath)
-
-    if status == "idle" and growth_rates.needs_recomputation(filepath):
-        df, err = get_full_csv_data(filepath)
-        if df is not None:
-            growth_rates.trigger_computation(filepath, df)
-            status = growth_rates.get_status(filepath)
-        else:
-            return JSONResponse({"error": err, "status": "error", "rows": None}, status_code=500)
-
     gr_df = growth_rates.load_growth_rates(filepath)
     rows = gr_df.to_dict(orient="records") if gr_df is not None else None
 
-    return JSONResponse({
-        "status": status,
-        "rows": rows,
-    })
+    return JSONResponse({"status": status, "rows": rows})
+
+
+@app.post("/svc/growth-rates/{name}/compute")
+async def compute_growth_rates(name: str):
+    """Manually trigger growth-rate computation for an experiment."""
+    csv_path = _find_csv(name)
+    if csv_path is None:
+        return JSONResponse({"error": f"File not found: {name}.csv"}, status_code=404)
+    filepath = str(csv_path)
+
+    if growth_rates.get_status(filepath) == "computing":
+        return JSONResponse({"status": "computing", "message": "Already running"})
+
+    df, err = get_full_csv_data(filepath)
+    if df is None:
+        return JSONResponse({"error": err}, status_code=500)
+
+    growth_rates.trigger_computation(filepath, df)
+    return JSONResponse({"status": "computing"})
 
 
 # ── SPA / static files from frontend/dist ────────────────────────────────────

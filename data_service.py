@@ -158,6 +158,7 @@ def _read_and_process_csv(filepath: str) -> tuple[pd.DataFrame | None, str | Non
             comment="#",
             usecols=["timestamp", "device", "channel", "raw_od", "converted_od"],
         )
+        df = df.dropna(subset=["timestamp", "device", "channel"])
         df["device"] = df["device"].apply(str)
         df["channel"] = df["channel"].apply(int)
 

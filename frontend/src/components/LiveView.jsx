@@ -274,6 +274,8 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
   const pauseBufferRef = useRef([]);     // accumulates live rows while paused
 
   // Build sample name map: {device: {channel: sampleName}}
+  // Config is primary (always present for live experiments); histData rows
+  // are the fallback for historical experiments that have no config YAML.
   const sampleNames = {};
   if (config?.samples) {
     config.samples.forEach((s) => {
@@ -281,6 +283,13 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
       sampleNames[s.device][s.channel] = s.name || `Ch ${s.channel}`;
     });
   }
+  histData.forEach((r) => {
+    if (!r.device || r.channel == null || !r.sample_name) return;
+    if (!sampleNames[r.device]) sampleNames[r.device] = {};
+    if (!sampleNames[r.device][r.channel]) {
+      sampleNames[r.device][r.channel] = r.sample_name;
+    }
+  });
 
   // Load historical data + config on mount
   useEffect(() => {

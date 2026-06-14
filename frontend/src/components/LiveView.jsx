@@ -432,12 +432,12 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
     const bySample = {};
     grRows.forEach((row) => {
       if (row.device !== device) return;
-      const key = row.sample_name || 'unknown';
+      const key = (row.sample_name != null && row.sample_name !== '') ? String(row.sample_name) : 'unknown';
       if (!bySample[key]) bySample[key] = { x: [], y: [], sample_name: key };
       bySample[key].x.push(row.t_min ?? null);
       bySample[key].y.push(row.growth_rate ?? null);
     });
-    return Object.values(bySample).sort((a, b) => a.sample_name.localeCompare(b.sample_name));
+    return Object.values(bySample).sort((a, b) => String(a.sample_name).localeCompare(String(b.sample_name)));
   };
 
   return (

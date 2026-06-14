@@ -71,13 +71,13 @@ export default function App() {
           disabled={!liveExp && !runningExp}
           title={
             liveExp
-              ? `Live: ${liveExp}`
+              ? `Visualize: ${liveExp}`
               : runningExp
-              ? `Live: ${runningExp.name}`
-              : 'No active experiment'
+              ? `Visualize: ${runningExp.name}`
+              : 'No experiment selected'
           }
         >
-          Live
+          Visualize
         </button>
 
         <button

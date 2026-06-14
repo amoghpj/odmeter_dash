@@ -14,15 +14,6 @@ import {
 } from '../api/go.js';
 import { listExperiments, saveConfig, getConfig as getSvcConfig } from '../api/data.js';
 
-function formatDuration(startIso) {
-  if (!startIso) return null;
-  const start = new Date(startIso);
-  const diff = Math.floor((Date.now() - start) / 1000);
-  if (diff < 60) return `${diff}s`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`;
-}
-
 /**
  * StatusBanner — shows running experiment or idle state.
  */
@@ -89,15 +80,12 @@ function PastExperiments({ localExps, goExps, onViewLive }) {
       {localExps.map((exp) => {
         const name = typeof exp === 'string' ? exp : exp.name || exp.experiment;
         const isRunning = runningSet.has(name);
-        const timeStarted = exp.time_started || exp.started_at;
-        const duration = timeStarted ? formatDuration(timeStarted) : null;
 
         return (
           <li key={name}>
             <span className="exp-name" title={name}>
               {name}
             </span>
-            {duration && <span className="exp-meta">{duration}</span>}
             <span className={`tag ${isRunning ? 'running' : 'stopped'}`}>
               {isRunning ? 'running' : 'stopped'}
             </span>

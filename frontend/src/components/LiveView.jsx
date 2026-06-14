@@ -266,6 +266,7 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [paused, setPaused] = useState(false);
+  const [timeStarted, setTimeStarted] = useState(null);
 
   const wsRef = useRef(null);
   const grPollRef = useRef(null);
@@ -306,6 +307,7 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
         // Store experiment start time so the WS handler can compute t_min
         if (data.meta?.time_started) {
           timeStartedRef.current = data.meta.time_started;
+          setTimeStarted(data.meta.time_started);
         }
       } else {
         setHistData([]);
@@ -456,6 +458,14 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
           ← Dashboard
         </button>
         <span className="page-title">{expName}</span>
+        {timeStarted && (
+          <span className="exp-meta">
+            Started {new Date(timeStarted).toLocaleString(undefined, {
+              month: 'short', day: 'numeric', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            })}
+          </span>
+        )}
         {isLive && (
           <span
             style={{

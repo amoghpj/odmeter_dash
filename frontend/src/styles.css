@@ -1003,3 +1003,53 @@ hr.divider {
   gap: 10px;
   margin-top: 14px;
 }
+
+/* ============================================================
+   Config / metadata picker
+   ============================================================ */
+
+.meta-picker {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-focus);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.meta-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.meta-picker-header input {
+  flex: 1;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.meta-picker-list {
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.meta-picker-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-dim);
+  transition: background 0.12s;
+}
+
+.meta-picker-list li:last-child {
+  border-bottom: none;
+}
+
+.meta-picker-list li:hover {
+  background: var(--bg-hover);
+}

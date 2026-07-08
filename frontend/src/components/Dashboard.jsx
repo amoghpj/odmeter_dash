@@ -12,7 +12,7 @@ import {
   stopExperiment,
   closeExperiment,
 } from '../api/go.js';
-import { listExperiments, saveConfig, getConfig as getSvcConfig } from '../api/data.js';
+import { listExperiments, saveConfig, getConfig as getSvcConfig, listConfigs } from '../api/data.js';
 
 /**
  * StatusBanner — shows running experiment or idle state.
@@ -124,6 +124,11 @@ export default function Dashboard({ onViewLive, runningExp }) {
   const [sampleRows, setSampleRows] = useState([]);
   const [formStatus, setFormStatus] = useState(null); // null | 'submitting' | 'error:...' | 'success'
 
+  // Config picker state
+  const [showConfigPicker, setShowConfigPicker] = useState(false);
+  const [availableConfigs, setAvailableConfigs] = useState([]);
+  const [configFilter, setConfigFilter] = useState('');
+
   // Load static data once
   useEffect(() => {
     getDevices()
@@ -194,6 +199,38 @@ export default function Dashboard({ onViewLive, runningExp }) {
     await new Promise((r) => setTimeout(r, 1000));
     await closeExperiment(runningExp.name);
   }, [runningExp]);
+
+  const handleOpenConfigPicker = async () => {
+    const configs = await listConfigs().catch(() => []);
+    setAvailableConfigs(Array.isArray(configs) ? configs : []);
+    setConfigFilter(user || '');
+    setShowConfigPicker(true);
+  };
+
+  const handleSelectConfig = async (name) => {
+    setShowConfigPicker(false);
+    const cfg = await getSvcConfig(name).catch(() => null);
+    if (!cfg?.samples?.length) return;
+    const DEFAULT_META_KEYS = ['strain', 'condition', 'replicate', 'group', 'std_curve'];
+    const rows = cfg.samples.map((s) => {
+      const meta = {};
+      DEFAULT_META_KEYS.forEach((k) => { meta[k] = s[k] !== undefined ? String(s[k]) : ''; });
+      Object.keys(s).forEach((k) => {
+        if (!['device', 'channel', 'name', ...DEFAULT_META_KEYS].includes(k)) {
+          meta[k] = s[k] !== undefined ? String(s[k]) : '';
+        }
+      });
+      return {
+        id: `row-${Date.now()}-${Math.random()}`,
+        device: String(s.device || ''),
+        channel: Number(s.channel) || 1,
+        sampleName: s.name || '',
+        meta,
+      };
+    });
+    setSampleRows(rows);
+    if (cfg.interval) setInterval_(cfg.interval);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -340,7 +377,66 @@ export default function Dashboard({ onViewLive, runningExp }) {
             </div>
 
             <hr className="divider" />
-            <p className="section-header">Samples</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <p className="section-header" style={{ marginBottom: 0 }}>Samples</p>
+              <button
+                type="button"
+                className="btn-back"
+                style={{ fontSize: 11, padding: '3px 10px' }}
+                onClick={handleOpenConfigPicker}
+              >
+                Load previous metadata
+              </button>
+            </div>
+
+            {showConfigPicker && (
+              <div className="meta-picker">
+                <div className="meta-picker-header">
+                  <input
+                    type="text"
+                    placeholder="Filter by name…"
+                    value={configFilter}
+                    onChange={(e) => setConfigFilter(e.target.value)}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="btn-del-row"
+                    onClick={() => setShowConfigPicker(false)}
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {availableConfigs.length === 0 ? (
+                  <p className="empty-state" style={{ padding: '10px 12px' }}>
+                    No saved configs found.
+                  </p>
+                ) : (
+                  <ul className="meta-picker-list">
+                    {availableConfigs
+                      .filter((c) =>
+                        !configFilter ||
+                        c.name.toLowerCase().includes(configFilter.toLowerCase())
+                      )
+                      .map((c) => (
+                        <li key={c.name} onClick={() => handleSelectConfig(c.name)}>
+                          <span className="exp-name">{c.name}</span>
+                          {c.time_started && (
+                            <span className="exp-meta">
+                              {new Date(c.time_started).toLocaleDateString(undefined, {
+                                month: 'short', day: 'numeric', year: 'numeric',
+                              })}
+                            </span>
+                          )}
+                          <span className="exp-meta">{c.sample_count} samples</span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             <SampleSheet
               devices={devices}
               stdCurves={stdCurves}

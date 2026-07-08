@@ -30,6 +30,11 @@ export function listExperiments() {
   return request('GET', '/svc/experiments');
 }
 
+/** GET /svc/configs — experiments that have a saved config YAML */
+export function listConfigs() {
+  return request('GET', '/svc/configs');
+}
+
 /**
  * GET /svc/data/{name}?max_points={maxPoints}
  * @param {string} name
@@ -67,7 +72,10 @@ export function getGrowthRates(name) {
 /**
  * POST /svc/growth-rates/{name}/compute
  * Manually trigger growth-rate computation.
+ * @param {string} name
+ * @param {number|null} startMin  — if set, only data at t_min >= startMin is used
  */
-export function computeGrowthRates(name) {
-  return request('POST', `/svc/growth-rates/${encodeURIComponent(name)}/compute`);
+export function computeGrowthRates(name, startMin = null) {
+  const qs = startMin != null ? `?t_start=${encodeURIComponent(startMin)}` : '';
+  return request('POST', `/svc/growth-rates/${encodeURIComponent(name)}/compute${qs}`);
 }

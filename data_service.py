@@ -425,6 +425,40 @@ async def download_csv(name: str):
     )
 
 
+# ── /svc/configs ─────────────────────────────────────────────────────────────
+
+@app.get("/svc/configs")
+async def list_configs():
+    """List all experiments that have a saved config YAML, newest first."""
+    results = []
+    seen: set[str] = set()
+    for data_dir in DATA_DIRS:
+        if not data_dir.is_dir():
+            continue
+        for cfg_path in sorted(data_dir.glob("*_config.yaml"), reverse=True):
+            stem = cfg_path.stem  # e.g. "my_exp_config"
+            if not stem.endswith("_config"):
+                continue
+            name = stem[:-7]  # strip "_config"
+            if name in seen:
+                continue
+            seen.add(name)
+            entry: dict = {"name": name, "sample_count": 0}
+            try:
+                with open(cfg_path) as f:
+                    cfg = yaml.safe_load(f) or {}
+                entry["sample_count"] = len(cfg.get("samples") or [])
+            except Exception:
+                pass
+            csv_path = _find_csv(name)
+            if csv_path:
+                meta = parse_csv_metadata(str(csv_path))
+                if meta and "time_started" in meta:
+                    entry["time_started"] = meta["time_started"]
+            results.append(entry)
+    return JSONResponse(results)
+
+
 # ── /svc/config/{name} ───────────────────────────────────────────────────────
 
 @app.get("/svc/config/{name}")
@@ -479,8 +513,12 @@ async def get_growth_rates(name: str):
 
 
 @app.post("/svc/growth-rates/{name}/compute")
-async def compute_growth_rates(name: str):
-    """Manually trigger growth-rate computation for an experiment."""
+async def compute_growth_rates(name: str, t_start: float | None = None):
+    """Manually trigger growth-rate computation for an experiment.
+
+    Optional query param: t_start (minutes after experiment start) — data before
+    this time is excluded from the computation.
+    """
     csv_path = _find_csv(name)
     if csv_path is None:
         return JSONResponse({"error": f"File not found: {name}.csv"}, status_code=404)
@@ -492,6 +530,9 @@ async def compute_growth_rates(name: str):
     df, err = get_full_csv_data(filepath)
     if df is None:
         return JSONResponse({"error": err}, status_code=500)
+
+    if t_start is not None:
+        df = df[df["t_min"] >= t_start]
 
     growth_rates.trigger_computation(filepath, df)
     return JSONResponse({"status": "computing"})

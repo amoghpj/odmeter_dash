@@ -49,28 +49,59 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
   );
 
   const addRow = useCallback(() => {
-    const defaultDevice = devices[0]?.label ?? '';
-    const defaultChannel = devices[0]?.channels?.[0]?.channel ?? 1;
+    // Find the first (device, channel) pair not already in rows
+    const usedPairs = new Set(rows.map((r) => `${r.device}:${r.channel}`));
+    let nextDevice = '';
+    let nextChannel = 1;
+    outerLoop: for (const dev of devices) {
+      const chs = dev.channels?.length
+        ? dev.channels.map((c) => c.channel)
+        : Array.from({ length: 8 }, (_, i) => i + 1);
+      for (const ch of chs) {
+        if (!usedPairs.has(`${dev.label}:${ch}`)) {
+          nextDevice = dev.label;
+          nextChannel = ch;
+          break outerLoop;
+        }
+      }
+    }
+    if (!nextDevice) {
+      nextDevice = devices[0]?.label ?? '';
+      nextChannel = devices[0]?.channels?.[0]?.channel ?? 1;
+    }
     const meta = {};
     allMetaCols.forEach((c) => (meta[c] = ''));
-    // Pre-select first available standard curve so submissions always carry one
     if (stdCurves.length > 0) meta['std_curve'] = stdCurves[0];
     onChange([
       ...rows,
       {
         id: `row-${Date.now()}-${Math.random()}`,
-        device: defaultDevice,
-        channel: defaultChannel,
+        device: nextDevice,
+        channel: nextChannel,
         sampleName: '',
         meta,
       },
     ]);
-  }, [rows, onChange, devices, allMetaCols]);
+  }, [rows, onChange, devices, allMetaCols, stdCurves]);
 
   const deleteRow = useCallback(
     (id) => onChange(rows.filter((r) => r.id !== id)),
     [rows, onChange]
   );
+
+  // Move focus to the same column in the next row instead of submitting the form
+  const handleCellKeyDown = useCallback((e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const td = e.target.closest('td');
+    const tr = td?.closest('tr');
+    const nextTr = tr?.nextElementSibling;
+    if (nextTr) {
+      const tdIdx = [...tr.children].indexOf(td);
+      const nextInput = nextTr.children[tdIdx]?.querySelector('input, select');
+      if (nextInput) nextInput.focus();
+    }
+  }, []);
 
   const toggleCol = (col) => {
     setActiveCols((prev) => {
@@ -158,6 +189,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
                       className="cell"
                       value={row.device}
                       onChange={(e) => updateRow(row.id, { device: e.target.value })}
+                      onKeyDown={handleCellKeyDown}
                     >
                       {devices.length === 0 && (
                         <option value="">No devices</option>
@@ -176,6 +208,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
                       onChange={(e) =>
                         updateRow(row.id, { channel: Number(e.target.value) })
                       }
+                      onKeyDown={handleCellKeyDown}
                     >
                       {getChannelOptions(row.device).map((ch) => (
                         <option key={ch} value={ch}>
@@ -191,6 +224,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
                       placeholder="sample name"
                       value={row.sampleName}
                       onChange={(e) => updateRow(row.id, { sampleName: e.target.value })}
+                      onKeyDown={handleCellKeyDown}
                     />
                   </td>
                   {visibleMetaCols.map((col) =>
@@ -200,6 +234,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
                           className="cell"
                           value={row.meta[col] ?? ''}
                           onChange={(e) => updateMeta(row.id, col, e.target.value)}
+                          onKeyDown={handleCellKeyDown}
                         >
                           <option value="">— none —</option>
                           {stdCurves.map((sc) => (
@@ -217,6 +252,7 @@ export default function SampleSheet({ devices = [], stdCurves = [], rows, onChan
                           value={row.meta[col] ?? ''}
                           onChange={(e) => updateMeta(row.id, col, e.target.value)}
                           placeholder={col}
+                          onKeyDown={handleCellKeyDown}
                         />
                       </td>
                     )

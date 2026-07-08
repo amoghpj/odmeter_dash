@@ -261,6 +261,7 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
   const [config, setConfig] = useState(null);
   const [grRows, setGrRows] = useState([]);
   const [grStatus, setGrStatus] = useState('idle'); // 'idle' | 'computing' | 'done' | 'error'
+  const [grStartMin, setGrStartMin] = useState('');
   const [yScale, setYScale] = useState('linear');
   const [wsStatus, setWsStatus] = useState('connecting');
   const [loading, setLoading] = useState(true);
@@ -555,8 +556,20 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
           );
         })}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <p className="section-header" style={{ marginBottom: 0 }}>Growth Rates</p>
+        <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+          Start at
+          <input
+            type="number"
+            min="0"
+            placeholder="0"
+            value={grStartMin}
+            onChange={(e) => setGrStartMin(e.target.value)}
+            style={{ width: 64, fontSize: 11, padding: '2px 4px' }}
+          />
+          min
+        </label>
         {grStatus === 'computing' ? (
           <span style={{ fontSize: 11, color: 'var(--amber)' }}>Computing…</span>
         ) : (
@@ -564,8 +577,9 @@ export default function LiveView({ expName, onBack, theme = 'dark', isLive = tru
             className="btn-back"
             style={{ fontSize: 11, padding: '3px 10px' }}
             onClick={() => {
+              const startMin = grStartMin !== '' ? Number(grStartMin) : null;
               setGrStatus('computing');
-              computeGrowthRates(expName).catch(() => setGrStatus('error'));
+              computeGrowthRates(expName, startMin).catch(() => setGrStatus('error'));
             }}
           >
             {grRows.length > 0 ? 'Recompute' : 'Compute'}
